@@ -342,10 +342,27 @@
                                     alt="Banner Images" loading="lazy" width="1030" height="450" decoding="async"
                                     data-nimg="1" style="color:transparent"
                                     src="{% static 'images/banner-image-034d9a.png' %}" />
-                                <div class="video-icon"><a
-                                        class="btn-default rounded-player popup-video border bg-white-dropshadow"
-                                        data-vbtype="video" href="https://github.com/harshparate03/vision-object-detection/releases/download/v1.0/demo_video.mp4"><span><i
-                                                class="feather-play"></i></span></a></div>
+                                <div class="video-icon">
+                                    <button onclick="document.getElementById('demo-video-modal').style.display='flex'"
+                                        class="btn-default rounded-player border bg-white-dropshadow"
+                                        style="cursor:pointer;">
+                                        <span><i class="feather-play"></i></span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Video Modal -->
+                        <div id="demo-video-modal"
+                            style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:9999; align-items:center; justify-content:center;"
+                            onclick="if(event.target===this){this.style.display='none'; document.getElementById('demo-vid').pause();}">
+                            <div style="position:relative; width:90%; max-width:900px;">
+                                <button onclick="document.getElementById('demo-video-modal').style.display='none'; document.getElementById('demo-vid').pause();"
+                                    style="position:absolute; top:-40px; right:0; background:none; border:none; color:white; font-size:30px; cursor:pointer; line-height:1;">&times;</button>
+                                <video id="demo-vid" controls style="width:100%; border-radius:12px; max-height:80vh;"
+                                    src="https://github.com/harshparate03/vision-object-detection/releases/download/v1.0/demo_video.mp4">
+                                    Your browser does not support the video tag.
+                                </video>
                             </div>
                         </div>
                     </div>
