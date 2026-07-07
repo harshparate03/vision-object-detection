@@ -621,24 +621,27 @@ from django.shortcuts import redirect, render
 from django.contrib import messages
 
 def admin_login(request):
+    if request.user.is_authenticated:
+        if request.user.role == 'admin' and request.user.is_superuser:
+            return redirect('admin_dashboard')
+        return redirect('index')
+
     if request.method == 'POST':
-        email = request.POST['email']
-        password = request.POST['password']
+        email = request.POST.get('email', '').strip()
+        password = request.POST.get('password', '').strip()
 
-        user = authenticate(request, email=email, password=password)  # Authenticate with email
-        
+        user = authenticate(request, email=email, password=password)
+
         if user is not None:
-            login(request, user)
-            
-            # Check if it's an admin and update role dynamically
             if user.role == 'admin' and user.is_superuser:
-                login(request, user, backend='django.contrib.auth.backends.ModelBackend')
-                messages.success(request, "Admin You're logged")
+                login(request, user, backend='vision.backends.EmailAuthBackend')
+                messages.success(request, "Welcome, Admin!")
                 return redirect('admin_dashboard')
-
-            # return redirect('index')  # Adjust this to your actual route
+            else:
+                messages.error(request, 'You do not have admin privileges.')
+                return redirect('admin_login')
         else:
-            messages.error(request, 'Invalid email or password')
+            messages.error(request, 'Invalid email or password.')
             return redirect('admin_login')
 
     return render(request, 'admin_login.html')

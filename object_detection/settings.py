@@ -187,8 +187,9 @@ CSRF_TRUSTED_ORIGINS = [
 
 # Production security settings (only active when DEBUG=False)
 if not DEBUG:
-    SECURE_SSL_REDIRECT = True
-    SECURE_HSTS_SECONDS = 31536000       # 1 year
+    SECURE_SSL_REDIRECT = False          # Render's load balancer handles HTTPS, don't redirect again
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')  # Trust Render's proxy
+    SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     SESSION_COOKIE_SECURE = True
