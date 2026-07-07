@@ -2,6 +2,7 @@
 venv/
 ENV/
 env/
+.venv/
 
 # --- 🐍 Python Artifacts ---
 __pycache__/

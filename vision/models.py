@@ -1,7 +1,6 @@
 import os
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
-from django.contrib.auth.models import User  # Default user model
 
 
 
@@ -103,22 +102,6 @@ class Feedback(models.Model):
 
     def __str__(self):
         return f"Feedback from {self.user.username} on {self.created_at}"
-
-def create_user(self, username, email, name, phone, password=None):
-    if not email:
-        raise ValueError('The Email field is required')
-    if not username:
-        raise ValueError('The Username field is required')
-
-    user = self.model(
-        username=username,
-        email=self.normalize_email(email),
-        name=name,
-        phone=phone,
-    )
-    user.set_password(password)  # Hashing password
-    user.save(using=self._db)
-    return user
 
 # models.py
 from django.db import models

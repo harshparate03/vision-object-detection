@@ -84,6 +84,111 @@
             transform: rotate(360deg);
         }
     }
+
+    /* ── Result area ── */
+    #result-area {
+        width: 100%;
+        max-width: 920px;
+        margin: 30px auto 0;
+        text-align: center;
+        padding: 0 16px;
+        box-sizing: border-box;
+    }
+
+    /* ── Upload buttons ── */
+    .upload-btn-group {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+    /* equal width on all screens */
+    .upload-btn-group form,
+    .upload-btn-group > button {
+        flex: 1 1 130px;
+        max-width: 180px;
+    }
+    .upload-btn-group form button,
+    .upload-btn-group > button {
+        width: 100%;
+    }
+
+    /* ── Annotated image ── */
+    #annotated-image {
+        max-width: 100%;
+        height: auto;
+        border: 2px solid white;
+        border-radius: 10px;
+    }
+
+    /* ── Webcam ── */
+    #webcam-wrapper {
+        position: relative;
+        display: inline-block;
+        width: 100%;
+        max-width: 640px;
+    }
+    #webcam-video {
+        width: 100%;
+        max-width: 640px;
+        height: auto;
+        border: 2px solid white;
+        border-radius: 10px;
+        display: block;
+    }
+    #detection-overlay {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        border-radius: 10px;
+        pointer-events: none;
+    }
+
+    /* ── Detected objects tags ── */
+    #detection-list li,
+    #video-detection-list li,
+    #webcam-detection-list li {
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 8px;
+        padding: 4px 12px;
+        font-size: 14px;
+    }
+
+    /* ── Mobile ≤ 576px ── */
+    @media (max-width: 576px) {
+        .upload-btn-group {
+            flex-direction: column;
+            align-items: stretch;
+            width: 100%;
+            max-width: 280px;
+            margin: 0 auto;
+            gap: 10px;
+        }
+        .upload-btn-group form,
+        .upload-btn-group > button {
+            flex: none;
+            max-width: 100%;
+            width: 100%;
+        }
+        .upload-btn-group form button,
+        .upload-btn-group > button {
+            width: 100%;
+            font-size: 14px;
+            padding: 10px 16px;
+            text-align: center;
+        }
+        #result-area { padding: 0 8px; }
+        #vp-time { font-size: 10px; }
+        #vp-speed { width: 50px; font-size: 10px; }
+        #vp-download-btn { padding: 4px 7px; font-size: 10px; }
+        .webcam-btn-group { flex-direction: column !important; align-items: center; }
+    }
+
+    /* ── Tablet 577–768px ── */
+    @media (min-width: 577px) and (max-width: 768px) {
+        #result-area { padding: 0 12px; }
+    }
 </style>
 
 <body>
@@ -322,198 +427,137 @@
 
 
                         <div id="detection-section" class="button-group mt--50 text-center"
-                            style="display: flex; flex-direction: column; align-items: center; gap: 20px;">
-                            <div class="button-container" style="display: flex; justify-content: center; gap: 15px;">
-                                <!-- Image Upload Button -->
+                            style="display:flex; flex-direction:column; align-items:center; gap:20px;">
+                            <div style="display:flex; justify-content:center; gap:15px; flex-wrap:wrap;" class="upload-btn-group">
+                                <!-- Image Upload -->
                                 <form id="image-upload-form" enctype="multipart/form-data">
                                     {% csrf_token %}
-                                    <input type="file" id="image-upload" name="image" accept="image/*"
-                                        style="display: none;" />
+                                    <input type="file" id="image-upload" name="image" accept="image/*" style="display:none;" />
                                     <button type="button" class="btn-default btn-large"
-                                        onclick="document.getElementById('image-upload').click();">
-                                        Upload Image
-                                    </button>
+                                        onclick="document.getElementById('image-upload').click();">Upload Image</button>
                                 </form>
-
-                                <!-- Video Upload Button -->
+                                <!-- Video Upload -->
                                 <form id="video-upload-form" enctype="multipart/form-data">
-                                    <input type="file" id="video-upload-input" name="video" accept="video/*"
-                                        style="display: none;" />
+                                    <input type="file" id="video-upload-input" name="video" accept="video/*" style="display:none;" />
                                     <button type="button" class="btn-default btn-large"
-                                        onclick="document.getElementById('video-upload-input').click();">
-                                        Upload Video
-                                    </button>
+                                        onclick="document.getElementById('video-upload-input').click();">Upload Video</button>
                                 </form>
-
-                                <!-- Webcam Button -->
+                                <!-- Webcam -->
                                 <button class="btn-default btn-large btn-border" onclick="openWebcam();">Webcam</button>
                             </div>
                         </div>
 
+                        <!-- ══════════ SINGLE RESULT AREA ══════════ -->
+                        <div id="result-area" style="width:100%; max-width:920px; margin:30px auto 0; text-align:center;">
 
-                        <!-- AI Loader (Appears while processing the image) -->
-                        <div id="ai-loader" class="loader-container" style="display: none;">
-                            <div class="spinner">
-                                <div class="spinner1"></div>
+                            <!-- Image loader -->
+                            <div id="ai-loader" class="loader-container" style="display:none;">
+                                <div class="spinner"><div class="spinner1"></div></div>
+                                <p style="color:white; font-weight:bold; margin-top:10px;">Processing Image...</p>
                             </div>
-                            <p style="color: white; font-weight: bold; margin-top:  10px;">Processing Image...</p>
-                        </div>
 
-                        <!-- Placeholder for Annotated Image -->
-                        <div id="annotated-image-container"
-                            style="margin-top: 20px; display: none; text-align: center; position: relative;">
-                            <button onclick="closeImageResult()"
-                                style="position: absolute; top: 0; right: 0; background: red; color: white; border: none; border-radius: 50%; width: 30px; height: 30px; font-size: 16px; cursor: pointer; z-index: 10;">&times;</button>
-                            <h4>Processed Image:</h4>
-                            <img id="annotated-image" src="" alt="Annotated Image"
-                                style="max-width: 80%; height: auto; border: 2px solid white; border-radius: 10px;" />
-                        </div>
-
-                        <!-- Detected Objects List -->
-                        <div id="detection-results" style="margin-top: 20px; display: none; text-align: center;">
-                            <h4>Detected Objects:</h4>
-                            <ol id="detection-list"
-                                style="display: flex; justify-content: center; gap: 15px; padding: 0; list-style: none;">
-                            </ol>
-                        </div>
-
-                        <!-- Generate Report Button -->
-                        <button id="generate-report-button" class="btn-default btn-large" style="display: none;"
-                            onclick="generateReport()">Generate Report</button>
-
-                        <!-- Loader (Appears while processing the video) -->
-                        <div id="ai-loader-video" class="loader-container" style="display: none;">
-                            <div class="spinner">
-                                <div class="spinner1"></div>
+                            <!-- Video loader -->
+                            <div id="ai-loader-video" class="loader-container" style="display:none;">
+                                <div class="spinner"><div class="spinner1"></div></div>
+                                <p style="color:white; font-weight:bold; margin-top:10px;">Processing Video...</p>
                             </div>
-                            <p style="color: white; font-weight: bold; margin-top: 10px;">Processing Video...</p>
-                        </div>
 
-                        <!-- Processed Video Player -->
-                        <div id="annotated-video-container"
-                            style="display:none; margin-top:24px; width:100%; max-width:920px; margin-left:auto; margin-right:auto;">
-                            <div
-                                style="background:#111827; border:1px solid #374151; border-radius:14px; overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,0.5);">
-
-                                <!-- Header -->
-                                <div
-                                    style="display:flex; justify-content:space-between; align-items:center; padding:10px 16px; border-bottom:1px solid #1f2937;">
-                                    <span style="color:#9ca3af; font-size:13px; font-weight:600;">&#127909; PROCESSED
-                                        VIDEO</span>
-                                    <button onclick="closeVideoResult()" title="Close"
-                                        style="background:none; border:1px solid #374151; color:#9ca3af; border-radius:6px; width:28px; height:28px; cursor:pointer; font-size:14px;">&times;</button>
+                            <!-- ── IMAGE PANEL ── -->
+                            <div id="annotated-image-container" style="display:none; position:relative;">
+                                <button onclick="closePanel('image')"
+                                    style="position:absolute; top:0; right:0; background:red; color:white; border:none; border-radius:50%; width:30px; height:30px; font-size:16px; cursor:pointer; z-index:10;">&times;</button>
+                                <h4 style="color:white;">Processed Image:</h4>
+                                <img id="annotated-image" src="" alt="Annotated Image"
+                                    style="max-width:80%; height:auto; border:2px solid white; border-radius:10px;" />
+                                <div id="detection-results" style="margin-top:20px; display:none;">
+                                    <h4 style="color:white;">Detected Objects:</h4>
+                                    <ol id="detection-list"
+                                        style="display:flex; justify-content:center; flex-wrap:wrap; gap:15px; padding:0; list-style:none; color:white;"></ol>
                                 </div>
-
-                                <!-- Video display -->
-                                <div
-                                    style="background:#000; min-height:180px; display:flex; align-items:center; justify-content:center;">
-                                    <video id="vp-video"
-                                        style="width:100%; max-height:480px; object-fit:contain; display:none;"
-                                        playsinline></video>
-                                    <img id="video-slideshow" src="" alt=""
-                                        style="width:100%; max-height:480px; object-fit:contain; display:none;">
-                                    <div id="vp-error"
-                                        style="display:none; color:#ef4444; font-size:14px; padding:20px;">&#9888; Could
-                                        not load video.</div>
+                                <!-- Generate Report — centered -->
+                                <div style="display:flex; justify-content:center; margin-top:20px;">
+                                    <button id="generate-report-button" class="btn-default btn-large"
+                                        style="display:none;" onclick="generateReport()">Generate Report</button>
                                 </div>
+                            </div>
 
-                                <!-- Controls -->
-                                <div style="padding:10px 16px 14px; background:#111827;">
-
-                                    <!-- Progress bar -->
-                                    <div id="vp-seek-area"
-                                        style="padding:8px 0; cursor:pointer; position:relative; user-select:none;">
-                                        <div id="vp-progress-bg"
-                                            style="background:#374151; border-radius:99px; height:4px; position:relative; transition:height 0.15s;">
-                                            <div id="vp-buffered-fill"
-                                                style="position:absolute; height:100%; background:#6b7280; border-radius:99px; width:0%; pointer-events:none;">
+                            <!-- ── VIDEO PANEL ── -->
+                            <div id="annotated-video-container" style="display:none; margin-top:0;">
+                                <div style="background:#111827; border:1px solid #374151; border-radius:14px; overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 16px; border-bottom:1px solid #1f2937;">
+                                        <span style="color:#9ca3af; font-size:13px; font-weight:600;">&#127909; PROCESSED VIDEO</span>
+                                        <button onclick="closePanel('video')" title="Close"
+                                            style="background:none; border:1px solid #374151; color:#9ca3af; border-radius:6px; width:28px; height:28px; cursor:pointer; font-size:14px;">&times;</button>
+                                    </div>
+                                    <div style="background:#000; min-height:180px; display:flex; align-items:center; justify-content:center;">
+                                        <video id="vp-video" style="width:100%; max-height:480px; object-fit:contain; display:none;" playsinline></video>
+                                        <img id="video-slideshow" src="" alt="" style="width:100%; max-height:480px; object-fit:contain; display:none;">
+                                        <div id="vp-error" style="display:none; color:#ef4444; font-size:14px; padding:20px;">&#9888; Could not load video.</div>
+                                    </div>
+                                    <div style="padding:10px 16px 14px; background:#111827;">
+                                        <div id="vp-seek-area" style="padding:8px 0; cursor:pointer; position:relative; user-select:none;">
+                                            <div id="vp-progress-bg" style="background:#374151; border-radius:99px; height:4px; position:relative; transition:height 0.15s;">
+                                                <div id="vp-buffered-fill" style="position:absolute; height:100%; background:#6b7280; border-radius:99px; width:0%; pointer-events:none;"></div>
+                                                <div id="vp-progress-fill" style="position:absolute; height:100%; background:linear-gradient(90deg,#8b5cf6,#06b6d4); border-radius:99px; width:0%; pointer-events:none;"></div>
+                                                <div id="vp-thumb" style="position:absolute; top:50%; left:0%; transform:translate(-50%,-50%); width:13px; height:13px; background:#fff; border-radius:50%; pointer-events:none; box-shadow:0 0 4px rgba(0,0,0,0.6); opacity:0; transition:opacity 0.15s;"></div>
                                             </div>
-                                            <div id="vp-progress-fill"
-                                                style="position:absolute; height:100%; background:linear-gradient(90deg,#8b5cf6,#06b6d4); border-radius:99px; width:0%; pointer-events:none;">
-                                            </div>
-                                            <div id="vp-thumb"
-                                                style="position:absolute; top:50%; left:0%; transform:translate(-50%,-50%); width:13px; height:13px; background:#fff; border-radius:50%; pointer-events:none; box-shadow:0 0 4px rgba(0,0,0,0.6); opacity:0; transition:opacity 0.15s;">
-                                            </div>
+                                            <div id="vp-tooltip" style="position:absolute; top:-30px; left:0; background:rgba(0,0,0,0.85); color:#fff; padding:3px 8px; font-size:11px; font-weight:600; border-radius:5px; pointer-events:none; opacity:0; white-space:nowrap; transform:translateX(-50%);">0:00</div>
                                         </div>
-                                        <div id="vp-tooltip"
-                                            style="position:absolute; top:-30px; left:0; background:rgba(0,0,0,0.85); color:#fff; padding:3px 8px; font-size:11px; font-weight:600; border-radius:5px; pointer-events:none; opacity:0; white-space:nowrap; transform:translateX(-50%);">
-                                            0:00</div>
-                                    </div>
-
-                                    <!-- Buttons -->
-                                    <div style="display:flex; align-items:center; gap:8px; margin-top:2px;">
-                                        <button id="vp-play-btn" onclick="vpTogglePlay()" title="Play/Pause"
-                                            style="background:#8b5cf6; border:none; color:#fff; border-radius:50%; width:36px; height:36px; font-size:15px; cursor:pointer; flex-shrink:0;">&#9654;</button>
-                                        <button onclick="vpSkip(-10)" title="-10s"
-                                            style="background:none; border:none; color:#9ca3af; font-size:12px; cursor:pointer; padding:4px 5px; border-radius:6px;">&#171;10s</button>
-                                        <button onclick="vpSkip(10)" title="+10s"
-                                            style="background:none; border:none; color:#9ca3af; font-size:12px; cursor:pointer; padding:4px 5px; border-radius:6px;">10s&#187;</button>
-                                        <span id="vp-time"
-                                            style="color:#d1d5db; font-size:12px; font-family:monospace; white-space:nowrap;">0:00
-                                            / 0:00</span>
-                                        <div style="flex:1;"></div>
-                                        
-                                       <select id="vp-speed" onchange="vpSetSpeed(this.value)"
-                                            style="background:#1f2937; border:1px solid #374151; color:#d1d5db; border-radius:6px; padding:4px 6px; font-size:12px; cursor:pointer; min-width:62px; width: 55px;">
-                                            <option value="0.25">0.25x</option>
-                                            <option value="0.5">0.5x</option>
-                                            <option value="1" selected>1x</option>
-                                            <option value="1.25">1.25x</option>
-                                            <option value="1.5">1.5x</option>
-                                            <option value="2">2x</option>
-                                        </select>
-                                        <button id="vp-download-btn" onclick="vpDownload()"
-                                            style="background:none; border:1px solid #374151; color:#9ca3af; border-radius:8px; padding:5px 10px; font-size:12px; cursor:pointer;">&#11015;
-                                            Download</button>
+                                        <div id="vp-controls-row" style="display:flex; align-items:center; gap:8px; margin-top:2px; flex-wrap:wrap;">
+                                            <button id="vp-play-btn" onclick="vpTogglePlay()" title="Play/Pause"
+                                                style="background:#8b5cf6; border:none; color:#fff; border-radius:50%; width:36px; height:36px; font-size:15px; cursor:pointer; flex-shrink:0;">&#9654;</button>
+                                            <button onclick="vpSkip(-10)" title="-10s"
+                                                style="background:none; border:none; color:#9ca3af; font-size:12px; cursor:pointer; padding:4px 5px;">&#171;10s</button>
+                                            <button onclick="vpSkip(10)" title="+10s"
+                                                style="background:none; border:none; color:#9ca3af; font-size:12px; cursor:pointer; padding:4px 5px;">10s&#187;</button>
+                                            <span id="vp-time" style="color:#d1d5db; font-size:12px; font-family:monospace; white-space:nowrap;">0:00 / 0:00</span>
+                                            <div style="flex:1;"></div>
+                                            <select id="vp-speed" onchange="vpSetSpeed(this.value)"
+                                                style="background:#1f2937; border:1px solid #374151; color:#d1d5db; border-radius:6px; padding:4px 6px; font-size:12px; cursor:pointer; width:62px;">
+                                                <option value="0.25">0.25x</option>
+                                                <option value="0.5">0.5x</option>
+                                                <option value="1" selected>1x</option>
+                                                <option value="1.25">1.25x</option>
+                                                <option value="1.5">1.5x</option>
+                                                <option value="2">2x</option>
+                                            </select>
+                                            <button id="vp-download-btn" onclick="vpDownload()"
+                                                style="background:none; border:1px solid #374151; color:#9ca3af; border-radius:8px; padding:5px 10px; font-size:12px; cursor:pointer;">&#11015; Download</button>
+                                        </div>
                                     </div>
                                 </div>
+                                <div id="detection-results-video" style="margin-top:20px; display:none;">
+                                    <h4 style="color:white;">Detected Objects:</h4>
+                                    <ol id="video-detection-list"
+                                        style="display:flex; justify-content:center; flex-wrap:wrap; gap:15px; padding:0; list-style:none; color:white;"></ol>
+                                </div>
                             </div>
-                        </div>
 
-                        <!-- Detected Objects List -->
-                        <div id="detection-results" style="margin-top: 20px; display: none; text-align: center;">
-                            <h4>Detected Objects:</h4>
-                            <ol id="detection-list"
-                                style="display: flex; justify-content: center; gap: 15px; padding: 0; list-style: none;">
-                            </ol>
-                        </div>
-
-                        <!-- Generate Report Button -->
-                        <button id="generate-report-button" class="btn-default btn-large" style="display: none;"
-                            onclick="generateReport()">Generate Report</button>
-
-                        <!-- Loader (Appears while processing the video) -->
-                        <div id="ai-loader-video" class="loader-container" style="display: none;">
-                            <div class="spinner">
-                                <div class="spinner1"></div>
+                            <!-- ── WEBCAM PANEL ── -->
+                            <div id="webcam-panel" style="display:none;">
+                                <div id="webcam-wrapper">
+                                    <video id="webcam-video" autoplay muted></video>
+                                    <canvas id="detection-overlay" style="display:none;"></canvas>
+                                </div>
+                                <div id="webcam-detection-results" style="display:none; margin-top:10px;">
+                                    <h4 style="color:white;">Detected Objects:</h4>
+                                    <ol id="webcam-detection-list"></ol>
+                                </div>
+                                <div class="webcam-btn-group" style="margin-top:15px; display:flex; justify-content:center; gap:12px; flex-wrap:wrap;">
+                                    <button class="btn-default btn-large" onclick="takeScreenshot()">Take Screenshot</button>
+                                    <button class="btn-default btn-large" id="start-detection-btn" onclick="startDetection()">Start Detection</button>
+                                    <button class="btn-default btn-large btn-border" onclick="closePanel('webcam')">Stop &amp; Close</button>
+                                </div>
                             </div>
-                            <p style="color: white; font-weight: bold; margin-top: 10px;">Processing Video...</p>
-                        </div>
 
+                        </div><!-- /#result-area -->
 
+                        <canvas id="screenshot-canvas" style="display:none;"></canvas>
 
-
-                        <!-- Detected Objects List -->
-                        <div id="detection-results-video" style="margin-top: 20px; text-align: center; display: none;">
-                            <h4>Detected Objects:</h4>
-                            <ol id="video-detection-list"
-                                style="display: flex; justify-content: center; gap: 15px; padding: 0; list-style: none;">
-                            </ol>
-                        </div>
-
-                        <!-- Generate Report Button -->
-                        <!-- <button id="generate-report-video-button" class="btn-default btn-large" style="display: none;"
-                            onclick="generateVideoReport()">Generate Report</button> -->
-
-                    </div>
+                    </div><!-- /.row -->
                     <script>
-                        function closeImageResult() {
-                            document.getElementById('annotated-image-container').style.display = 'none';
-                            document.getElementById('annotated-image').src = '';
-                            document.getElementById('detection-results').style.display = 'none';
-                            document.getElementById('detection-list').innerHTML = '';
-                            document.getElementById('generate-report-button').style.display = 'none';
-                        }
+                        function closeImageResult() { closePanel('image'); }
+                        function closeVideoResult() { closePanel('video'); }
 
                         var _vp = { mode: 'video', frames: [], fps: 5, idx: 0, playing: false, timer: null, seeking: false, speed: 1, volume: 80, muted: false };
 
@@ -736,23 +780,12 @@
                             vpUpdateVolumeIcon(); vpAttachSeekEvents(); vpUpdateUI();
                         }
 
-                        function closeVideoResult() {
-                            if (_vp.timer) { clearInterval(_vp.timer); _vp.timer = null; }
-                            _vp.playing = false; _vp.frames = [];
-                            var vid = vpGetVideo(); if (vid) { vid.pause(); vid.src = ''; vid.style.display = 'none'; }
-                            var sl = document.getElementById('video-slideshow'); if (sl) { sl.src = ''; sl.style.display = 'none'; }
-                            document.getElementById('annotated-video-container').style.display = 'none';
-                            document.getElementById('detection-results-video').style.display = 'none';
-                        }
+                        function closeVideoResult() { closePanel('video'); }
 
                         function vpDownload() {
                             var vid = vpGetVideo();
                             if (_vp.mode === 'video' && vid && vid.src) {
-                                var a = document.createElement('a');
-                                a.href = vid.src;
-                                a.download = 'annotated_video.mp4';
-                                a.click();
-                                return;
+                                var a = document.createElement('a'); a.href = vid.src; a.download = 'annotated_video.mp4'; a.click(); return;
                             }
                             if (!_vp.frames.length) return;
                             var btn = document.getElementById('vp-download-btn');
@@ -769,11 +802,8 @@
                                 recorder.ondataavailable = function (e) { if (e.data.size) chunks.push(e.data); };
                                 recorder.onstop = function () {
                                     var blob = new Blob(chunks, { type: 'video/webm' });
-                                    var a = document.createElement('a');
-                                    a.href = URL.createObjectURL(blob);
-                                    a.download = 'annotated_video.webm';
-                                    a.click();
-                                    URL.revokeObjectURL(a.href);
+                                    var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+                                    a.download = 'annotated_video.webm'; a.click(); URL.revokeObjectURL(a.href);
                                     if (btn) { btn.innerHTML = '&#11015; Download'; btn.disabled = false; }
                                 };
                                 recorder.start();
@@ -789,309 +819,191 @@
                             img.src = _vp.frames[0];
                         }
 
-                        function generateVideoReport() { }
+                        function generateVideoReport() {}
                         function toggleVideoPlay() { vpTogglePlay(); }
                         function seekVideo(e) { vpSeekToPos(e); }
                     </script>
 
-                    <!-- handle video upload -->
+
+
                     <script>
-                        document.addEventListener("DOMContentLoaded", function () {
-                            const videoUploadInput = document.getElementById("video-upload-input");
-                            const aiLoader = document.getElementById("ai-loader-video");
-                            const detectionsList = document.getElementById("video-detection-list");
+                        /* ══ PANEL SWITCHER ══ */
+                        var webcamStream = null, detectionActive = false, detectionTimer = null;
 
-                            videoUploadInput.addEventListener("change", function () {
-                                const file = this.files[0];
-                                if (!file || !file.type.startsWith("video/")) {
-                                    alert("Please upload a valid video file");
-                                    return;
-                                }
-
-                                const formData = new FormData();
-                                formData.append("video", file);
-
-                                aiLoader.style.display = "flex";
-                                document.getElementById("annotated-video-container").style.display = "none";
-                                detectionsList.innerHTML = "";
-
-                                fetch("{% url 'upload_video' %}", {
-                                    method: "POST",
-                                    body: formData,
-                                    headers: { "X-CSRFToken": getCsrfToken() }
-                                })
-                                    .then(r => r.json())
-                                    .then(data => {
-                                        aiLoader.style.display = "none";
-                                        if (data.status === "success" && data.video_url) {
-                                            if (data.frames) { _vp.frames = data.frames; _vp.fps = data.fps || 5; }
-                                            vpInitVideo(data.video_url);
-                                            if (data.detected_objects && data.detected_objects.length > 0) {
-                                                detectionsList.innerHTML = "";
-                                                data.detected_objects.forEach(obj => {
-                                                    const li = document.createElement("li");
-                                                    li.textContent = obj.label + ": " + obj.count;
-                                                    li.style.color = "white";
-                                                    detectionsList.appendChild(li);
-                                                });
-                                                document.getElementById("detection-results-video").style.display = "block";
-                                            }
-                                            setTimeout(() => document.getElementById("annotated-video-container").scrollIntoView({ behavior: "smooth", block: "center" }), 300);
-                                        } else if (data.status === "success" && data.frames && data.frames.length > 0) {
-                                            vpInit(data.frames, data.fps || 5);
-                                            setTimeout(() => document.getElementById("annotated-video-container").scrollIntoView({ behavior: "smooth", block: "center" }), 300);
-                                        } else {
-                                            alert("Error: " + (data.message || "Video processing failed."));
-                                        }
-                                    })
-                                    .catch(err => {
-                                        aiLoader.style.display = "none";
-                                        alert("An error occurred while processing the video: " + err.message);
-                                    });
+                        function showPanel(name) {
+                            ['ai-loader','ai-loader-video','annotated-image-container','annotated-video-container','webcam-panel'].forEach(function(id){
+                                var el = document.getElementById(id); if (el) el.style.display = 'none';
                             });
-                        });
-                    </script>
+                            if (name === 'image-loading') document.getElementById('ai-loader').style.display = 'flex';
+                            else if (name === 'video-loading') document.getElementById('ai-loader-video').style.display = 'flex';
+                            else if (name === 'image') document.getElementById('annotated-image-container').style.display = 'block';
+                            else if (name === 'video') document.getElementById('annotated-video-container').style.display = 'block';
+                            else if (name === 'webcam') document.getElementById('webcam-panel').style.display = 'block';
+                        }
 
-
-
-                    <div style="display: flex; flex-direction: column; align-items: center; margin-top: 20px;">
-                        <div style="position: relative; display: inline-block;">
-                            <video id="webcam-video" width="640" height="480" autoplay muted
-                                style="display: none; border: 2px solid white; border-radius: 10px;"></video>
-                            <canvas id="detection-overlay" width="640" height="480"
-                                style="display: none; position: absolute; top: 0; left: 0; border-radius: 10px; pointer-events: none;"></canvas>
-                        </div>
-                        <div id="webcam-detection-results" style="display: none; text-align: center; margin-top: 10px;">
-                            <h4 style="color: white;">Detected Objects:</h4>
-                            <ol id="webcam-detection-list"
-                                style="display: flex; justify-content: center; gap: 15px; padding: 0; list-style: none; color: white;">
-                            </ol>
-                        </div>
-                    </div>
-
-                    <div id="webcam-buttons" style="text-align: center; width: 100%; margin-top: 10px; display: none;">
-                        <button class="btn-default btn-large" onclick="takeScreenshot()">Take Screenshot</button>
-                        <button class="btn-default btn-large" id="start-detection-btn" onclick="startDetection()">Start
-                            Detection</button>
-                        <button class="btn-default btn-large" onclick="stopWebcam()" id="stop-webcam-btn">Stop
-                            Webcam</button>
-                    </div>
-
-                    <img id="webcam-feed" src="" style="width: 100%; display: block;">
-                    <canvas id="screenshot-canvas" style="display: none;"></canvas>
-
-
-                    <!-- <div id="webcam-buttons" class="button-group mt--50 text-center" style="display: none;">
-                        <button class="btn-default btn-large" onclick="takeScreenshot()">Take Screenshot</button>
-                        <button class="btn-default btn-large" onclick="startDetection()">Start Detection</button>
-                    </div> -->
-                    <!-- Webcam Controls -->
-                    <!-- ---------- -->
-                    <!-- <div id="webcam-buttons" class="button-group mt--50 text-center" style="display: none;">
-                        <button class="btn-default btn-large" onclick="takeScreenshot()">Take Screenshot</button>
-                        <button class="btn-default btn-large" id="start-detection-btn" onclick="startDetection()">Start
-                            Detection</button>
-                    </div> -->
-                    <!-- -------- -->
-                    <!-- <div id="stop-buttons" class="button-group mt--50 text-center" style="display: none;">
-                        <button class="btn-default btn-large" onclick="stopDetection()">Stop Detection</button>
-                        <button class="btn-default btn-large" onclick="stopWebcam()">Stop Webcam</button>
-                    </div> -->
-                    <!-- //// -->
-                    <!-- <div id="stop-buttons" class="button-group mt--50 text-center" style="display: none;">
-                        <button class="btn-default btn-large" onclick="stopWebcam()">Stop Webcam</button>
-                    </div> -->
-                    <!-- //// -->
-                    <!-- <img id="webcam-feed" src="" style="width: 100%; display: block;">
-                    <canvas id="screenshot-canvas" style="display: none;"></canvas> -->
-                    <!-- .......... -->
-                    <!-- <img id="webcam-feed" src="" style="width: 100%; display: block;">
-                    <canvas id="screenshot-canvas" style="display: none;"></canvas> -->
-                    <!-- .......... -->
-                    <!-- <canvas id="screenshot-canvas" style="display: none;"></canvas> -->
-                    <!-- For rendering the screenshot -->
-
-                    <script>
-                        var webcamStream = null;
-                        var detectionActive = false;
-                        var detectionTimer = null;
+                        function closePanel(type) {
+                            if (type === 'webcam') {
+                                stopDetection();
+                                if (webcamStream) { webcamStream.getTracks().forEach(function(t){ t.stop(); }); webcamStream = null; }
+                                var v = document.getElementById('webcam-video'); if (v) v.srcObject = null;
+                            }
+                            if (type === 'video') {
+                                if (_vp.timer) { clearInterval(_vp.timer); _vp.timer = null; }
+                                _vp.playing = false; _vp.frames = [];
+                                var vid = vpGetVideo(); if (vid) { vid.pause(); vid.src = ''; vid.style.display = 'none'; }
+                                var sl = document.getElementById('video-slideshow'); if (sl) { sl.src = ''; sl.style.display = 'none'; }
+                                document.getElementById('detection-results-video').style.display = 'none';
+                            }
+                            if (type === 'image') {
+                                document.getElementById('annotated-image').src = '';
+                                document.getElementById('detection-results').style.display = 'none';
+                                document.getElementById('detection-list').innerHTML = '';
+                                document.getElementById('generate-report-button').style.display = 'none';
+                            }
+                            showPanel('none');
+                        }
 
                         function getCsrfToken() {
-                            var name = 'csrftoken';
-                            var cookies = document.cookie.split(';');
+                            var name = 'csrftoken', cookies = document.cookie.split(';');
                             for (var i = 0; i < cookies.length; i++) {
                                 var c = cookies[i].trim();
                                 if (c.startsWith(name + '=')) return decodeURIComponent(c.substring(name.length + 1));
                             }
-                            var el = document.querySelector('[name=csrfmiddlewaretoken]');
-                            return el ? el.value : '';
+                            var el = document.querySelector('[name=csrfmiddlewaretoken]'); return el ? el.value : '';
                         }
 
                         function openWebcam() {
-                            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                                alert('Webcam not supported in this browser.');
-                                return;
-                            }
+                            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { alert('Webcam not supported.'); return; }
                             navigator.mediaDevices.getUserMedia({ video: true })
-                                .then(function (stream) {
+                                .then(function(stream) {
                                     webcamStream = stream;
-                                    var video = document.getElementById('webcam-video');
-                                    video.srcObject = stream;
-                                    video.style.display = 'block';
-                                    // Keep overlay hidden until detection starts
+                                    document.getElementById('webcam-video').srcObject = stream;
                                     document.getElementById('detection-overlay').style.display = 'none';
-                                    document.getElementById('webcam-buttons').style.display = 'inline-block';
-                                    // Auto-scroll to webcam section
-                                    setTimeout(function () {
-                                        document.getElementById('webcam-video').scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                    }, 300);
+                                    showPanel('webcam');
+                                    setTimeout(function(){ document.getElementById('webcam-panel').scrollIntoView({ behavior:'smooth', block:'center' }); }, 300);
                                 })
-                                .catch(function (err) {
-                                    alert('Cannot access webcam: ' + err.message);
-                                });
-                        }
-
-                        function stopWebcam() {
-                            // Stop detection first
-                            stopDetection();
-                            // Stop camera stream
-                            if (webcamStream) {
-                                webcamStream.getTracks().forEach(function (t) { t.stop(); });
-                                webcamStream = null;
-                            }
-                            var video = document.getElementById('webcam-video');
-                            video.srcObject = null;
-                            video.style.display = 'none';
-                            document.getElementById('webcam-buttons').style.display = 'none';
-                            document.getElementById('webcam-feed').src = '';
-                        }
-
-                        function startDetection() {
-                            var video = document.getElementById('webcam-video');
-                            if (!video || !video.srcObject) {
-                                alert('Please open webcam first.');
-                                return;
-                            }
-                            if (detectionActive) return;
-                            detectionActive = true;
-
-                            // Show overlay canvas on top of webcam
-                            var overlay = document.getElementById('detection-overlay');
-                            overlay.width = video.videoWidth || 640;
-                            overlay.height = video.videoHeight || 480;
-                            overlay.style.display = 'block';
-
-                            // Update button
-                            var btn = document.getElementById('start-detection-btn');
-                            btn.innerText = 'Stop Detection';
-                            btn.setAttribute('onclick', 'stopDetection()');
-
-                            // Start detection loop
-                            runDetection(video);
+                                .catch(function(err){ alert('Cannot access webcam: ' + err.message); });
                         }
 
                         function stopDetection() {
                             detectionActive = false;
-
-                            // Cancel any pending timer
-                            if (detectionTimer) {
-                                clearTimeout(detectionTimer);
-                                detectionTimer = null;
-                            }
-
-                            // Hide overlay completely
+                            if (detectionTimer) { clearTimeout(detectionTimer); detectionTimer = null; }
                             var overlay = document.getElementById('detection-overlay');
-                            if (overlay) {
-                                overlay.getContext('2d').clearRect(0, 0, overlay.width, overlay.height);
-                                overlay.style.display = 'none';
-                            }
-
-                            // Hide detection results
-                            var wr = document.getElementById('webcam-detection-results');
-                            if (wr) wr.style.display = 'none';
-
-                            // Reset button
+                            if (overlay) { overlay.getContext('2d').clearRect(0,0,overlay.width,overlay.height); overlay.style.display = 'none'; }
+                            var wr = document.getElementById('webcam-detection-results'); if (wr) wr.style.display = 'none';
                             var btn = document.getElementById('start-detection-btn');
-                            if (btn) {
-                                btn.innerText = 'Start Detection';
-                                btn.setAttribute('onclick', 'startDetection()');
-                            }
+                            if (btn) { btn.innerText = 'Start Detection'; btn.setAttribute('onclick','startDetection()'); }
+                        }
+
+                        function startDetection() {
+                            var video = document.getElementById('webcam-video');
+                            if (!video || !video.srcObject) { alert('Please open webcam first.'); return; }
+                            if (detectionActive) return;
+                            detectionActive = true;
+                            var overlay = document.getElementById('detection-overlay');
+                            /* use actual rendered size so canvas matches video on all screen sizes */
+                            overlay.width  = video.videoWidth  || video.offsetWidth  || 640;
+                            overlay.height = video.videoHeight || video.offsetHeight || 480;
+                            overlay.style.display = 'block';
+                            var btn = document.getElementById('start-detection-btn');
+                            btn.innerText = 'Stop Detection'; btn.setAttribute('onclick','stopDetection()');
+                            runDetection(video);
                         }
 
                         function runDetection(video) {
                             if (!detectionActive) return;
-
                             var canvas = document.createElement('canvas');
-                            canvas.width = video.videoWidth || 640;
-                            canvas.height = video.videoHeight || 480;
+                            canvas.width  = video.videoWidth  || video.offsetWidth  || 640;
+                            canvas.height = video.videoHeight || video.offsetHeight || 480;
                             canvas.getContext('2d').drawImage(video, 0, 0);
-
-                            canvas.toBlob(function (blob) {
-                                if (!detectionActive) return; // check again after async
-                                var formData = new FormData();
-                                formData.append('image', blob, 'frame.jpg');
-                                fetch("{% url 'upload_image' %}", {
-                                    method: 'POST',
-                                    headers: { 'X-CSRFToken': getCsrfToken() },
-                                    body: formData
-                                })
-                                    .then(function (r) { return r.json(); })
-                                    .then(function (data) {
+                            canvas.toBlob(function(blob) {
+                                if (!detectionActive) return;
+                                var fd = new FormData(); fd.append('image', blob, 'frame.jpg');
+                                fetch("{% url 'upload_image' %}", { method:'POST', headers:{'X-CSRFToken':getCsrfToken()}, body:fd })
+                                    .then(function(r){ return r.json(); })
+                                    .then(function(data) {
                                         if (!detectionActive) return;
                                         if (data.status === 'success') {
-                                            // Draw annotated frame on overlay
                                             var overlay = document.getElementById('detection-overlay');
                                             var img = new Image();
-                                            img.onload = function () {
-                                                if (detectionActive && overlay) {
-                                                    overlay.getContext('2d').drawImage(img, 0, 0, overlay.width, overlay.height);
-                                                }
-                                            };
+                                            img.onload = function(){ if (detectionActive && overlay) overlay.getContext('2d').drawImage(img,0,0,overlay.width,overlay.height); };
                                             img.src = data.annotated_image_url;
-
-                                            // Show detected objects below webcam
-                                            var list = document.getElementById('webcam-detection-list');
-                                            list.innerHTML = '';
-                                            data.detected_objects.forEach(function (obj) {
-                                                var li = document.createElement('li');
-                                                li.textContent = obj.label + ': ' + obj.count;
-                                                list.appendChild(li);
-                                            });
+                                            var list = document.getElementById('webcam-detection-list'); list.innerHTML = '';
+                                            data.detected_objects.forEach(function(obj){ var li = document.createElement('li'); li.textContent = obj.label+': '+obj.count; list.appendChild(li); });
                                             document.getElementById('webcam-detection-results').style.display = 'block';
                                         }
-                                        // Schedule next detection
-                                        if (detectionActive) {
-                                            detectionTimer = setTimeout(function () { runDetection(video); }, 2000);
-                                        }
+                                        if (detectionActive) detectionTimer = setTimeout(function(){ runDetection(video); }, 2000);
                                     })
-                                    .catch(function () {
-                                        if (detectionActive) {
-                                            detectionTimer = setTimeout(function () { runDetection(video); }, 2000);
-                                        }
-                                    });
+                                    .catch(function(){ if (detectionActive) detectionTimer = setTimeout(function(){ runDetection(video); }, 2000); });
                             }, 'image/jpeg', 0.8);
                         }
 
                         function takeScreenshot() {
                             var video = document.getElementById('webcam-video');
-                            if (!video || !video.srcObject) {
-                                alert('Please open webcam first.');
-                                return;
-                            }
+                            if (!video || !video.srcObject) { alert('Please open webcam first.'); return; }
                             var canvas = document.getElementById('screenshot-canvas');
-                            canvas.width = video.videoWidth || 640;
-                            canvas.height = video.videoHeight || 480;
+                            canvas.width = video.videoWidth || 640; canvas.height = video.videoHeight || 480;
                             canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-                            canvas.toBlob(function (blob) {
-                                var link = document.createElement('a');
-                                link.href = URL.createObjectURL(blob);
-                                link.download = 'screenshot.jpg';
-                                document.body.appendChild(link);
-                                link.click();
-                                document.body.removeChild(link);
+                            canvas.toBlob(function(blob){
+                                var link = document.createElement('a'); link.href = URL.createObjectURL(blob);
+                                link.download = 'screenshot.jpg'; document.body.appendChild(link); link.click(); document.body.removeChild(link);
                             }, 'image/jpeg', 0.95);
                         }
 
+                        /* ══ UPLOADS (DOMContentLoaded) ══ */
+                        document.addEventListener('DOMContentLoaded', function() {
+                            document.getElementById('video-upload-input').addEventListener('change', function() {
+                                var file = this.files[0];
+                                if (!file || !file.type.startsWith('video/')) { alert('Please upload a valid video file'); return; }
+                                var fd = new FormData(); fd.append('video', file);
+                                showPanel('video-loading');
+                                document.getElementById('video-detection-list').innerHTML = '';
+                                fetch("{% url 'upload_video' %}", { method:'POST', body:fd, headers:{'X-CSRFToken':getCsrfToken()} })
+                                    .then(function(r){ return r.json(); })
+                                    .then(function(data) {
+                                        if (data.status === 'success' && data.video_url) {
+                                            if (data.frames) { _vp.frames = data.frames; _vp.fps = data.fps || 5; }
+                                            showPanel('video'); vpInitVideo(data.video_url);
+                                            if (data.detected_objects && data.detected_objects.length > 0) {
+                                                var list = document.getElementById('video-detection-list'); list.innerHTML = '';
+                                                data.detected_objects.forEach(function(obj){ var li = document.createElement('li'); li.textContent = obj.label+': '+obj.count; list.appendChild(li); });
+                                                document.getElementById('detection-results-video').style.display = 'block';
+                                            }
+                                            setTimeout(function(){ document.getElementById('annotated-video-container').scrollIntoView({ behavior:'smooth', block:'center' }); }, 300);
+                                        } else if (data.status === 'success' && data.frames && data.frames.length > 0) {
+                                            showPanel('video'); vpInit(data.frames, data.fps || 5);
+                                            setTimeout(function(){ document.getElementById('annotated-video-container').scrollIntoView({ behavior:'smooth', block:'center' }); }, 300);
+                                        } else { showPanel('none'); alert('Error: ' + (data.message || 'Video processing failed.')); }
+                                    })
+                                    .catch(function(err){ showPanel('none'); alert('Error: ' + err.message); });
+                            });
+
+                            document.getElementById('image-upload').addEventListener('change', function(event) {
+                                var file = event.target.files[0];
+                                if (!file || !file.type.startsWith('image/')) return;
+                                var fd = new FormData(); fd.append('image', file);
+                                showPanel('image-loading');
+                                fetch("{% url 'upload_image' %}", { method:'POST', body:fd, headers:{'X-CSRFToken':getCsrfToken()} })
+                                    .then(function(r){ return r.text().then(function(t){ return {ok:r.ok, status:r.status, text:t}; }); })
+                                    .then(function(res) {
+                                        var data;
+                                        try { data = JSON.parse(res.text); } catch(e) { showPanel('none'); alert('Server error '+res.status); return; }
+                                        if (!res.ok) { showPanel('none'); alert('Error '+res.status+': '+(data.message||res.text)); return; }
+                                        if (data.status === 'success') {
+                                            showPanel('image');
+                                            document.getElementById('annotated-image').src = data.annotated_image_url;
+                                            var list = document.getElementById('detection-list'); list.innerHTML = '';
+                                            if (data.detected_objects.length > 0) {
+                                                document.getElementById('detection-results').style.display = 'block';
+                                                data.detected_objects.forEach(function(obj){ var li = document.createElement('li'); li.textContent = obj.label+': '+obj.count; list.appendChild(li); });
+                                            } else { document.getElementById('detection-results').style.display = 'none'; }
+                                            document.getElementById('generate-report-button').style.display = 'inline-block';
+                                            document.getElementById('annotated-image-container').scrollIntoView({ behavior:'smooth', block:'center' });
+                                        } else { showPanel('none'); alert('Error: '+data.message); }
+                                    })
+                                    .catch(function(err){ showPanel('none'); alert('Error: '+err.message); });
+                            });
+                        });
                     </script>
 
 
@@ -1529,175 +1441,32 @@
                 });
         });
     </script>
-    <!-- <script>
-        document.getElementById('image-upload').addEventListener('change', function (event) {
-            const file = event.target.files[0];
-            if (file && file.type.startsWith('image/')) {
-                const formData = new FormData();
-                formData.append('image', file);
-
-                // Show the AI neon loader while processing
-                document.getElementById('ai-loader').style.display = 'flex';
-
-                fetch("{% url 'upload_image' %}", {
-                    method: 'POST',
-                    body: formData,
-                    headers: {
-                        'X-CSRFToken': getCsrfToken(),  // Include CSRF token for Django
-                    },
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.status === 'success') {
-                            const annotatedImageContainer = document.getElementById('annotated-image-container');
-                            const annotatedImage = document.getElementById('annotated-image');
-
-                            annotatedImage.src = data.annotated_image_url;
-                            annotatedImageContainer.style.display = 'block';
-                        } else {
-                            alert('Error processing image: ' + data.message);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        alert('An error occurred while processing the image.');
-                    })
-                    .finally(() => {
-                        // Hide the neon loader after processing
-                        document.getElementById('ai-loader').style.display = 'none';
-                    });
-            } else {
-                alert('Please select a valid image file.');
-            }
-        });
-    </script> -->
-
-    <script>
-        function getCsrfToken() {
-            var name = 'csrftoken';
-            var cookies = document.cookie.split(';');
-            for (var i = 0; i < cookies.length; i++) {
-                var c = cookies[i].trim();
-                if (c.startsWith(name + '=')) return decodeURIComponent(c.substring(name.length + 1));
-            }
-            var el = document.querySelector('[name=csrfmiddlewaretoken]');
-            return el ? el.value : '';
-        }
-    </script>
-    <script>
-        document.getElementById('image-upload').addEventListener('change', function (event) {
-            const file = event.target.files[0];
-            if (file && file.type.startsWith('image/')) {
-                const formData = new FormData();
-                formData.append('image', file);
-
-                // Show the AI loader while processing
-                document.getElementById('ai-loader').style.display = 'flex';
-
-                fetch("{% url 'upload_image' %}", {
-                    method: 'POST',
-                    body: formData,
-                    headers: {
-                        'X-CSRFToken': getCsrfToken(),
-                    },
-                })
-                    .then(response => {
-                        return response.text().then(text => ({ ok: response.ok, status: response.status, text }));
-                    })
-                    .then(({ ok, status, text }) => {
-                        document.getElementById('ai-loader').style.display = 'none';
-                        let data;
-                        try { data = JSON.parse(text); } catch (e) {
-                            console.error('Non-JSON response:', text);
-                            alert('Server error ' + status + ':\n' + text.substring(0, 500));
-                            return;
-                        }
-                        if (!ok) {
-                            console.error('Server error:', data);
-                            alert('Error ' + status + ': ' + (data.message || text));
-                            return;
-                        }
-                        if (data.status === 'success') {
-                            // Show the processed image
-                            document.getElementById('annotated-image').src = data.annotated_image_url;
-                            document.getElementById('annotated-image-container').style.display = 'block';
-
-                            // Display detected objects below the image
-                            const detectionList = document.getElementById('detection-list');
-                            detectionList.innerHTML = ''; // Clear previous detections
-
-                            if (data.detected_objects.length > 0) {
-                                document.getElementById('detection-results').style.display = 'block';
-                                data.detected_objects.forEach(obj => {
-                                    let listItem = document.createElement('li');
-                                    listItem.textContent = `${obj.label}: ${obj.count}`;
-                                    detectionList.appendChild(listItem);
-                                });
-                            } else {
-                                document.getElementById('detection-results').style.display = 'none';
-                            }
-
-                            // Show generate report button
-                            document.getElementById('generate-report-button').style.display = 'inline-block';
-
-                            // Auto-scroll to result
-                            document.getElementById('annotated-image-container').scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-                        } else {
-                            alert('Error: ' + data.message);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Image upload error:', error);
-                        document.getElementById('ai-loader').style.display = 'none';
-                        alert('Error: ' + error.message);
-                    });
-            }
-        });
-    </script>
     <script src="{% static 'js/jspdf.umd.min.js' %}"></script>
     <script>
-
-        // Assuming you already have the code to populate the annotated image and detection list
-
         // Function to generate the report
         function generateReport() {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
 
-            // Define logo URL (Ensure correct path or use base64)
             const logoUrl = '/static/images/logo_white.png';
-
-            // **Header Section**
             doc.setFont("monospace", "bold");
             doc.setFontSize(18);
-
-            // Add logo to the header (angled properly)
-            doc.addImage(logoUrl, 'PNG', 11, 10, 25, 23); // Adjust width/height as needed
-
-            // Add "Vision" beside the logo in the same style as your HTML
+            doc.addImage(logoUrl, 'PNG', 11, 10, 25, 23);
             doc.setFont("courier");
-            doc.text("Vision", 32, 23); // Positioning for better alignment
-
-            // Add Report Title (Centered)
+            doc.text("Vision", 32, 23);
             doc.setFont("Arial");
             doc.setFontSize(14);
-            doc.setTextColor(0, 0, 0); // Reset text color to black
+            doc.setTextColor(0, 0, 0);
             doc.text("Processed Image Report", doc.internal.pageSize.width / 2, 22, { align: "center" });
-
-            // Horizontal Line under Header
             doc.setLineWidth(0.5);
             doc.line(10, 30, 200, 30);
 
-            // **Detected Objects List**
             const detectionList = document.getElementById("detection-list");
             const detectedObjects = Array.from(detectionList.children).map(item => item.textContent);
-
             doc.setFont("helvetica", "normal");
             doc.setFontSize(12);
             doc.text("Detected Objects:", 10, 45);
             let yPosition = 50;
-
             detectedObjects.forEach((object, index) => {
                 doc.text(`${index + 1}. ${object}`, 10, yPosition);
                 yPosition += 10;

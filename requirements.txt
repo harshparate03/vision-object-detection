@@ -1,5 +1,4 @@
 Django==5.0.6
-mysqlclient==2.2.7
 Pillow==11.2.1
 opencv-python-headless==4.10.0.84
 twilio==9.4.3
@@ -14,3 +13,5 @@ charset-normalizer==3.3.2
 numpy==1.26.4
 reportlab==4.2.5
 psycopg2-binary==2.9.9
+imageio==2.34.2
+django-cors-headers==4.4.0

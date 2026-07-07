@@ -15,10 +15,12 @@ import random
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import check_password
 from django.contrib.auth.decorators import login_required
+from django.conf import settings  # required by dashboard and other views
 # detect_objects imported lazily in views
 import ast
 from django.utils.timezone import localtime
 from datetime import timedelta
+from .models import UploadHistory, UserProfile, HelpMessage, Feedback
 
 
 # Logger setup for tracking sign-in attempts
@@ -438,12 +440,14 @@ def admin_dashboard(request):
         'help_messages': help_messages,
     }
     return render(request, 'admin_dashboard.html', context)
-    # return render(request, 'dashboard_admin.html', {'user_count': user_count})
-    # user_count = UserProfile.objects.count()
 
 
-from django.shortcuts import render
-from .models import HelpMessage
+def admin_logout(request):
+    """Logs out the admin and redirects to the admin login page."""
+    logout(request)
+    messages.success(request, 'Admin logged out successfully.')
+    return redirect('admin_login')
+
 
 from django.shortcuts import render
 from django.http import JsonResponse
@@ -496,11 +500,16 @@ import cv2
 import numpy as np
 import base64
 import requests as http_requests
+import urllib3
+
+# Disable SSL warnings globally — needed on Windows where the system CA store
+# is not used by Python's ssl module by default
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
-ROBOFLOW_API_KEY = os.environ.get("ROBOFLOW_API_KEY", "8oe91GceFQVvYXU9IjB8")
+ROBOFLOW_API_KEY = os.environ.get("ROBOFLOW_API_KEY", "")
 ROBOFLOW_MODEL = "coco/17"  # Latest COCO YOLOv8 model
 
 COLORS = [
@@ -511,6 +520,9 @@ COLORS = [
 
 def detect_with_roboflow(image):
     """Send image to Roboflow API and return annotated image + detections"""
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
     _, buffer = cv2.imencode('.jpg', image)
     img_base64 = base64.b64encode(buffer).decode('utf-8')
 
@@ -518,7 +530,8 @@ def detect_with_roboflow(image):
         f"https://detect.roboflow.com/{ROBOFLOW_MODEL}",
         params={"api_key": ROBOFLOW_API_KEY, "confidence": 40, "overlap": 30},
         data=img_base64,
-        headers={"Content-Type": "application/x-www-form-urlencoded"}
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        verify=False
     )
     response.raise_for_status()
     result = response.json()
@@ -776,12 +789,15 @@ def upload_video(request):
                 img_b64 = _b64.b64encode(buf).decode('utf-8')
 
                 try:
+                    import urllib3
+                    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
                     resp = http_requests.post(
                         f"https://detect.roboflow.com/{ROBOFLOW_MODEL}",
                         params={"api_key": ROBOFLOW_API_KEY, "confidence": 40, "overlap": 30},
                         data=img_b64,
                         headers={"Content-Type": "application/x-www-form-urlencoded"},
-                        timeout=8
+                        timeout=8,
+                        verify=False
                     )
                     preds = resp.json().get('predictions', [])
                     annotated = frame.copy()
@@ -993,25 +1009,9 @@ def admin_delete_history(request, pk):
 
     return redirect('admin_history')
 
-from django.shortcuts import render
-from django.utils.dateparse import parse_date
-from .models import User  # Import your User model
-
-def admin_user_management(request):
-    users = User.objects.all()
-
-    start_date = request.GET.get("start_date")
-    end_date = request.GET.get("end_date")
-
-    if start_date and end_date:
-        users = users.filter(date_joined__range=[parse_date(start_date), parse_date(end_date)])
-
-    return render(request, "admin_user_management.html", {"users": users})
-
 from django.shortcuts import render, redirect
 from django.utils.dateparse import parse_date
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.models import User
 from django.http import JsonResponse, HttpResponse
 from reportlab.pdfgen import canvas
 import io
@@ -1021,7 +1021,7 @@ def admin_user_management(request):
     if not request.user.is_superuser:
         return redirect('home')  # Redirect non-admin users
     
-    users = User.objects.all()
+    users = UserProfile.objects.filter(role="user")
 
     start_date = request.GET.get("start_date")
     end_date = request.GET.get("end_date")
@@ -1046,7 +1046,7 @@ def filter_users(request):
     end_date = request.GET.get('end')
 
     if start_date and end_date:
-        users = User.objects.filter(date_joined__date__range=[start_date, end_date])
+        users = UserProfile.objects.filter(date_joined__date__range=[start_date, end_date], role="user")
         user_data = [{"username": user.username, "email": user.email, "date_joined": user.date_joined.strftime("%Y-%m-%d")} for user in users]
         return JsonResponse(user_data, safe=False)
 
@@ -1057,7 +1057,6 @@ from django.http import HttpResponse
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
-from .models import UserProfile
 from datetime import datetime
 
 
@@ -1200,34 +1199,21 @@ def generate_history_report(request):
             print("Error parsing detected_objects:", e)
             detected_objects = "N/A"  
 
-        # Fetch Image (Resize before adding to PDF)
-        image_path = None
-        if upload.image:  
+        # Fetch Image (stored as base64 data URL, not a file path)
+        img_obj = "No Image"
+        if upload.image and upload.image.startswith('data:image'):
             try:
-                image_path = os.path.join(settings.MEDIA_ROOT, upload.image.name)
-
-                if os.path.exists(image_path):  
-                    img = PILImage.open(image_path)
-                    
-                    # Resize image
-                    img.thumbnail((60, 60))  
-                    
-                    # Save to a temp location
-                    temp_img_path = os.path.join(settings.MEDIA_ROOT, f"temp_{index}.jpg")
-                    img.save(temp_img_path)
-
-                    image_paths.append(temp_img_path)  
-                    image_path = temp_img_path  
-                else:
-                    print(f"Image file not found: {image_path}")
-                    image_path = None
+                import base64 as _b64
+                header, b64data = upload.image.split(',', 1)
+                img_bytes = _b64.b64decode(b64data)
+                pil_img = PILImage.open(BytesIO(img_bytes))
+                pil_img.thumbnail((60, 60))
+                temp_img_path = os.path.join(settings.MEDIA_ROOT, f"temp_{index}.jpg")
+                pil_img.save(temp_img_path)
+                image_paths.append(temp_img_path)
+                img_obj = ReportLabImage(temp_img_path, width=50, height=50)
             except Exception as e:
-                print(f"Error fetching image for {username}: {e}")
-                image_path = None
-
-        # Create Image Object
-        # img_obj = Image(image_path, width=50, height=50) if image_path else "No Image"
-        img_obj = ReportLabImage(image_path, width=50, height=50) if image_path else "No Image"
+                print(f"Error decoding image for {username}: {e}")
 
         # Append data to table (align text properly)
         data.append([
@@ -1433,47 +1419,9 @@ def generate_feedback_report(request):
     return JsonResponse({"error": "Invalid request method"}, status=405)
 
 
-from django.shortcuts import render, redirect
-from django.http import JsonResponse
-from django.utils.dateparse import parse_date
-from django.contrib.auth.decorators import login_required
-from .models import UploadHistory  # Assuming UploadHistory stores upload data
-
-@login_required
-def filter_history(request):
-    if not request.user.is_superuser:
-        return JsonResponse({"error": "Unauthorized"}, status=403)
-
-    start_date = request.GET.get('start')
-    end_date = request.GET.get('end')
-    search_query = request.GET.get('search')
-
-    uploads = UploadHistory.objects.all()
-
-    if start_date and end_date:
-        uploads = uploads.filter(uploaded_at__date__range=[parse_date(start_date), parse_date(end_date)])
-
-    if search_query:
-        uploads = uploads.filter(user__username__icontains=search_query)
-
-    upload_data = [
-        {
-            "id": upload.id,
-            "username": upload.user.username,
-            "email": upload.user.email,
-            "image_url": upload.image.url,
-            "detected_objects": [{"label": obj.label, "count": obj.count} for obj in upload.detected_objects],
-            "uploaded_at": upload.uploaded_at.strftime("%Y-%m-%d"),
-        }
-        for upload in uploads
-    ]
-
-    return JsonResponse(upload_data, safe=False)
-
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.utils.dateparse import parse_date
-from .models import HelpMessage
 
 @login_required
 def help_message_filter(request):
@@ -1547,11 +1495,12 @@ def generate_report_history(request):
     uploads = UploadHistory.objects.all().order_by('-uploaded_at')
 
     for upload in uploads:
-        detected_objects = ast.literal_eval(upload.detected_objects)  # Convert stored string to list/dict
+        detected_objects = ast.literal_eval(upload.detected_objects) if upload.detected_objects else []
         detected_objects_str = ', '.join([f"{obj['label']} ({obj['count']})" for obj in detected_objects])
         writer.writerow([upload.id, upload.user.username, upload.user.email, detected_objects_str, upload.uploaded_at.strftime('%Y-%m-%d %H:%M:%S')])
 
     return response
+
 
 @login_required
 def filter_history(request):
@@ -1575,8 +1524,8 @@ def filter_history(request):
             "id": upload.id,
             "username": upload.user.username,
             "email": upload.user.email,
-            "image_url": upload.image.url,
-            "detected_objects": [{"label": obj.label, "count": obj.count} for obj in upload.detected_objects],
+            "image_url": upload.image if upload.image else '',
+            "detected_objects": ast.literal_eval(upload.detected_objects) if upload.detected_objects else [],
             "uploaded_at": upload.uploaded_at.strftime("%Y-%m-%d"),
         }
         for upload in uploads
