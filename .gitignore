@@ -25,13 +25,14 @@ db.sqlite3
 *.joblib
 
 # --- 🎞️ Media / Output Files ---
-*.mp4
 *.avi
 *.mkv
 *.mov
 media/
 !vision/static/media/
+!vision/static/images/*.mp4
 output/
+outputs/
 uploads/
 
 # --- 🗃️ Archives ---
