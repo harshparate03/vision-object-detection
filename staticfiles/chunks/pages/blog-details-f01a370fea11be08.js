@@ -1,0 +1,2 @@
+(self.webpackChunk_N_E=self.webpackChunk_N_E||[]).push([[9510],{9504:function(u,e,n){(window.__NEXT_P=window.__NEXT_P||[]).push(["/blog-details",function(){return n(7526)}])},7526:function(u,e,n){"use strict";n.r(e);var t=n(7294),o=n(1163);e.default=()=>{let u=(0,o.useRouter)(),e=u.query.blogId;(0,t.useEffect)(()=>{void 0===e&&u.push("/blog-details/1")},[])}}},function(u){u.O(0,[9774,2888,179],function(){return u(u.s=9504)}),_N_E=u.O()}]);
+//# sourceMappingURL=blog-details-f01a370fea11be08.js.map
