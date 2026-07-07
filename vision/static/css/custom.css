@@ -1101,3 +1101,19 @@
 }
 
 /*# sourceMappingURL=729da5d815f20bc4.css.map*/
+
+
+/* ── Disable Chrome's built-in visual search / Google Lens icon on images ── */
+img {
+    -webkit-user-select: none;
+    user-select: none;
+}
+img::after {
+    display: none !important;
+}
+/* Hide browser visual search overlay button */
+[data-visualcompletion],
+[jsname="N9Xkfe"],
+.irc_mimg {
+    display: none !important;
+}
