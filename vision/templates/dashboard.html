@@ -909,7 +909,9 @@
                             canvas.getContext('2d').drawImage(video, 0, 0);
                             canvas.toBlob(function(blob) {
                                 if (!detectionActive) return;
-                                var fd = new FormData(); fd.append('image', blob, 'frame.jpg');
+                                var fd = new FormData();
+                                fd.append('image', blob, 'frame.jpg');
+                                fd.append('source', 'webcam');  // tells server not to save history
                                 fetch("{% url 'upload_image' %}", { method:'POST', headers:{'X-CSRFToken':getCsrfToken()}, body:fd })
                                     .then(function(r){ return r.json(); })
                                     .then(function(data) {

@@ -594,16 +594,19 @@ def upload_image(request):
 
             detected_objects = [{"label": label, "count": count} for label, count in detections.items()]
 
-            from .models import UploadHistory
-            from django.utils.timezone import now
-            import base64 as _b64
-            annotated_b64 = "data:image/jpeg;base64," + _b64.b64encode(out_buffer.tobytes()).decode('utf-8')
-            UploadHistory.objects.create(
-                user=request.user,
-                image=annotated_b64,
-                detected_objects=str(detected_objects),
-                uploaded_at=now()
-            )
+            # Only save to history if this is NOT a webcam frame
+            source = request.POST.get('source', 'upload')
+            if source != 'webcam':
+                from .models import UploadHistory
+                from django.utils.timezone import now
+                import base64 as _b64
+                annotated_b64 = "data:image/jpeg;base64," + _b64.b64encode(out_buffer.tobytes()).decode('utf-8')
+                UploadHistory.objects.create(
+                    user=request.user,
+                    image=annotated_b64,
+                    detected_objects=str(detected_objects),
+                    uploaded_at=now()
+                )
             return JsonResponse({
                 'status': 'success',
                 'annotated_image_url': annotated_image_url,
