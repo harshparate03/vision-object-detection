@@ -78,6 +78,7 @@ urlpatterns = [
     path('stop_webcam/', views.stop_webcam, name='stop_webcam'),
     path('reset_admin/', reset_admin_password, name='reset_admin'),
     path('db_setup/', db_setup, name='db_setup'),
+    path('google34c875193a5d51bc.html', lambda r: __import__('django.http', fromlist=['HttpResponse']).HttpResponse('google-site-verification: google34c875193a5d51bc.html', content_type='text/html'), name='google_verify'),
 ]
 
 
