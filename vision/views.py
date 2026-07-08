@@ -27,6 +27,8 @@ from .models import UploadHistory, UserProfile, HelpMessage, Feedback
 logger = logging.getLogger(__name__)
 
 def index(request):
+    if request.user.is_authenticated:
+        return redirect('dashboard')
     return render(request, 'index.html')
 
 @login_required
@@ -59,6 +61,8 @@ from django.contrib import messages
 from django.shortcuts import render, redirect
 
 def signin(request):
+    if request.user.is_authenticated:
+        return redirect('dashboard')
     if request.method == 'POST':
         # Clear previous messages before adding a new one
         list(messages.get_messages(request))  
@@ -95,6 +99,8 @@ def logout_user(request):
     return redirect('index')  # Redirect to the sign-in page
 
 def signup(request):
+    if request.user.is_authenticated:
+        return redirect('dashboard')
     if request.method == 'POST':
         form = SignUpForm(request.POST)
         if form.is_valid():
