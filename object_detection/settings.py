@@ -178,7 +178,12 @@ os.makedirs(MEDIA_ROOT, exist_ok=True)
 
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
-LOGIN_URL = 'signin/'  # Adjust this to your actual login route
+LOGIN_URL = 'signin/'
+
+# ── Persistent login — keep users logged in for 30 days ──
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 30   # 30 days in seconds
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False    # don't kill session when browser closes
+SESSION_SAVE_EVERY_REQUEST = True          # refresh the 30-day window on every request
 
 CORS_ALLOW_ALL_ORIGINS = True
 
