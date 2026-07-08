@@ -868,10 +868,13 @@ def upload_video(request):
             os.unlink(tmp_path)
 
             detected_objects = [{"label": k, "count": v} for k, v in all_detections.items()]
+            # Send actual video duration so the frontend timeline is accurate
+            video_duration = total_frames / fps if fps > 0 else 0
             return JsonResponse({
                 'status': 'success',
                 'frames': annotated_frames,
                 'fps': min(fps, 10),
+                'duration': round(video_duration, 2),
                 'video_url': video_data_url,
                 'detected_objects': detected_objects
             })
