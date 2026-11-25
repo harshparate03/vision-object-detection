@@ -561,7 +561,13 @@ def upload_image(request):
             if image is None:
                 return JsonResponse({'status': 'error', 'message': 'Failed to read image'}, status=400)
 
-            annotated_image, detections, boxes = detect_with_roboflow(image)
+            if not ROBOFLOW_API_KEY:
+                return JsonResponse({'status': 'error', 'message': 'Detection service is not configured.'}, status=503)
+            try:
+                annotated_image, detections, boxes = detect_with_roboflow(image)
+            except Exception:
+                logger.error('Image detection service failed')
+                return JsonResponse({'status': 'error', 'message': 'Image detection service failed. Please try again.'}, status=502)
 
             ok, out_buffer = cv2.imencode('.jpg', annotated_image)
             if not ok:
@@ -588,8 +594,8 @@ def upload_image(request):
                 'image_height': int(image.shape[0]),
             })
         except Exception as e:
-            logger.exception("Error processing image")
-            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+            logger.error('Image processing failed')
+            return JsonResponse({'status': 'error', 'message': 'Image processing failed. Please try again.'}, status=500)
 
     return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=400)
 
@@ -760,7 +766,7 @@ def upload_video(request):
                         cv2.putText(annotated, text, (x1 + 2, max(y1 - 4, 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
                         all_detections[label] = all_detections.get(label, 0) + 1
                 except Exception:
-                    logger.exception('Video detection service failed')
+                    logger.error('Video detection service failed')
                     return JsonResponse({'status': 'error', 'message': 'Video detection service failed. Please try again.'}, status=502)
 
                 _, out_buf = cv2.imencode('.jpg', annotated, [cv2.IMWRITE_JPEG_QUALITY, 80])
@@ -772,11 +778,13 @@ def upload_video(request):
 
             if not annotated_frames:
                 return JsonResponse({'status': 'error', 'message': 'Video contains no readable frames.'}, status=400)
+            video_duration = total_frames / fps if total_frames > 0 else frame_idx / fps
+            playback_fps = len(annotated_frames) / video_duration
             video_data_url = None
             if annotated_frames:
                 try:
                     import imageio.v3 as iio
-                    out_fps = min(fps, 10)
+                    out_fps = playback_fps
                     frame_arrays = []
                     for fb64 in annotated_frames:
                         img = cv2.imdecode(np.frombuffer(base64.b64decode(fb64.split(',', 1)[1]), np.uint8), cv2.IMREAD_COLOR)
@@ -804,11 +812,10 @@ def upload_video(request):
                     logger.debug("Optional MP4 encoding skipped; returning frame slideshow", exc_info=True)
 
             detected_objects = [{"label": k, "count": v} for k, v in all_detections.items()]
-            video_duration = total_frames / fps if fps > 0 else 0
             return JsonResponse({
                 'status': 'success',
                 'frames': annotated_frames,
-                'fps': min(fps, 10),
+                'fps': playback_fps,
                 'duration': round(video_duration, 2),
                 'video_url': video_data_url,
                 'detected_objects': detected_objects,
@@ -827,6 +834,7 @@ def upload_video(request):
 
 
 @login_required
+@require_POST
 def delete_upload_history(request, upload_id):
     upload = get_object_or_404(UploadHistory, id=upload_id, user=request.user)
     try:
@@ -863,6 +871,8 @@ def admin_delete_history(request, pk):
     if not _is_admin(request.user):
         raise PermissionDenied("You do not have permission to delete history.")
 
+    if request.method != 'POST':
+        return HttpResponse(status=405, headers={'Allow': 'POST'})
     history_item = get_object_or_404(UploadHistory, pk=pk)
     try:
         history_item.delete()
@@ -927,9 +937,16 @@ def generate_report(request):
     start_date = request.POST.get('start_date')
     end_date = request.POST.get('end_date')
 
+    if bool(start_date) != bool(end_date):
+        return JsonResponse({'error': 'Provide both start_date and end_date.'}, status=400)
     if start_date and end_date:
-        start_d = datetime.strptime(start_date, "%Y-%m-%d").date()
-        end_d = datetime.strptime(end_date, "%Y-%m-%d").date()
+        try:
+            start_d = datetime.strptime(start_date, "%Y-%m-%d").date()
+            end_d = datetime.strptime(end_date, "%Y-%m-%d").date()
+        except ValueError:
+            return JsonResponse({'error': 'Invalid date format. Use YYYY-MM-DD.'}, status=400)
+        if start_d > end_d:
+            return JsonResponse({'error': 'Start date must be before end date.'}, status=400)
         users_qs = UserProfile.objects.filter(date_joined__date__range=[start_d, end_d], role="user")
     else:
         users_qs = UserProfile.objects.filter(role="user")
@@ -994,9 +1011,16 @@ def generate_history_report(request):
     start_date = request.POST.get('start_date')
     end_date = request.POST.get('end_date')
 
+    if bool(start_date) != bool(end_date):
+        return JsonResponse({'error': 'Provide both start_date and end_date.'}, status=400)
     if start_date and end_date:
-        start_d = datetime.strptime(start_date, "%Y-%m-%d").date()
-        end_d = datetime.strptime(end_date, "%Y-%m-%d").date()
+        try:
+            start_d = datetime.strptime(start_date, "%Y-%m-%d").date()
+            end_d = datetime.strptime(end_date, "%Y-%m-%d").date()
+        except ValueError:
+            return JsonResponse({'error': 'Invalid date format. Use YYYY-MM-DD.'}, status=400)
+        if start_d > end_d:
+            return JsonResponse({'error': 'Start date must be before end date.'}, status=400)
         uploads = UploadHistory.objects.select_related('user').filter(uploaded_at__date__range=[start_d, end_d])
     else:
         uploads = UploadHistory.objects.select_related('user').all()

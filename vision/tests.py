@@ -236,3 +236,82 @@ class VisionSecurityAndFlowTests(TestCase):
             self.assertRedirects(response, reverse('dashboard'), fetch_redirect_response=False)
             dashboard = self.client.get(reverse('dashboard'), secure=True)
             self.assertEqual(dashboard.status_code, 200)
+
+
+    def test_deactivated_session_is_rejected(self):
+        self.client.force_login(self.user, backend='vision.backends.EmailAuthBackend')
+        self.user.is_active = False
+        self.user.save(update_fields=['is_active'])
+        self.assertEqual(self.client.get(reverse('dashboard')).status_code, 302)
+        from django.contrib.auth import authenticate
+        self.assertIsNone(authenticate(email=self.user.email, password='Password123!'))
+
+    def test_history_delete_requires_post_and_preserves_ownership(self):
+        upload = UploadHistory.objects.create(user=self.user, image='', detected_objects='[]')
+        self.client.force_login(self.user)
+        own_url = reverse('delete_upload_history', args=[upload.pk])
+        self.assertEqual(self.client.get(own_url).status_code, 405)
+        self.assertTrue(UploadHistory.objects.filter(pk=upload.pk).exists())
+        self.client.force_login(self.admin)
+        self.assertEqual(self.client.post(own_url).status_code, 404)
+        admin_url = reverse('admin_delete_history', args=[upload.pk])
+        self.assertEqual(self.client.get(admin_url).status_code, 405)
+        self.assertTrue(UploadHistory.objects.filter(pk=upload.pk).exists())
+        self.assertEqual(self.client.post(admin_url).status_code, 302)
+        self.assertFalse(UploadHistory.objects.filter(pk=upload.pk).exists())
+
+    def test_report_rejects_invalid_reversed_and_partial_dates(self):
+        self.client.force_login(self.admin)
+        for route in ['generate_report', 'generate_history_report']:
+            for dates in [
+                {'start_date': 'bad-date', 'end_date': 'bad-date'},
+                {'start_date': '2026-12-01', 'end_date': '2026-01-01'},
+                {'start_date': '2026-01-01'},
+            ]:
+                self.assertEqual(self.client.post(reverse(route), dates).status_code, 400)
+
+    def test_image_service_error_does_not_expose_credentials(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        self.client.force_login(self.user)
+        with patch('vision.views.ROBOFLOW_API_KEY', 'private-key'), \
+             patch('vision.views.detect_with_roboflow', side_effect=RuntimeError('url?api_key=private-key')):
+            with self.assertLogs('vision', level='ERROR') as logs:
+                response = self.client.post(reverse('upload_image'), {
+                    'image': SimpleUploadedFile('image.jpg', self._jpeg_bytes(), content_type='image/jpeg')})
+        self.assertEqual(response.status_code, 502)
+        self.assertNotIn('private-key', response.content.decode())
+        self.assertNotIn('private-key', ' '.join(logs.output))
+
+    def test_web_admin_recovery_disabled_even_with_secret(self):
+        from django.test import override_settings
+        with override_settings(RESET_ADMIN_SECRET='configured-secret'):
+            for route in ['db_setup', 'reset_admin']:
+                self.assertEqual(self.client.get(reverse(route), {'secret': 'configured-secret'}).status_code, 403)
+                self.assertEqual(self.client.post(reverse(route), {'secret': 'configured-secret'}).status_code, 403)
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.check_password('AdminPassword123!'))
+
+    def test_sampled_video_keeps_original_duration(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from unittest.mock import MagicMock
+        import cv2
+        import numpy as np
+        self.client.force_login(self.user)
+        capture = MagicMock()
+        capture.isOpened.return_value = True
+        props = {cv2.CAP_PROP_FRAME_COUNT: 3000, cv2.CAP_PROP_FPS: 30,
+                 cv2.CAP_PROP_FRAME_WIDTH: 24, cv2.CAP_PROP_FRAME_HEIGHT: 24}
+        capture.get.side_effect = lambda prop: props[prop]
+        capture.read.return_value = (True, np.zeros((24, 24, 3), dtype=np.uint8))
+        with patch('vision.views.ROBOFLOW_API_KEY', 'test'), \
+             patch('vision.views.cv2.VideoCapture', return_value=capture), \
+             patch('vision.views.http_requests.post') as post, \
+             patch.dict('sys.modules', {'imageio.v3': None}):
+            post.return_value.json.return_value = {'predictions': []}
+            response = self.client.post(reverse('upload_video'), {
+                'video': SimpleUploadedFile('video.mp4', b'test')})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(len(data['frames']), 20)
+        self.assertEqual(data['duration'], 100)
+        self.assertAlmostEqual(len(data['frames']) / data['fps'], 100)
