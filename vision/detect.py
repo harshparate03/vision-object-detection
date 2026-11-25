@@ -233,9 +233,12 @@ class YOLODetector:
             
             # Display result if requested
             if show_result:
-                cv2.imshow('YOLOv8 Detection', annotated_image)
-                cv2.waitKey(0)
-                cv2.destroyAllWindows()
+                try:
+                    cv2.imshow('YOLOv8 Detection', annotated_image)
+                    cv2.waitKey(0)
+                    cv2.destroyAllWindows()
+                except cv2.error:
+                    self.logger.warning("GUI display unavailable in headless OpenCV environment.")
                 
             return str(output_filename)
             
@@ -313,9 +316,12 @@ class YOLODetector:
                 
                 # Display if requested
                 if show_result:
-                    cv2.imshow('YOLOv8 Detection', annotated_frame)
-                    if cv2.waitKey(1) & 0xFF == ord('q'):
-                        break
+                    try:
+                        cv2.imshow('YOLOv8 Detection', annotated_frame)
+                        if cv2.waitKey(1) & 0xFF == ord('q'):
+                            break
+                    except cv2.error:
+                        show_result = False
                 
                 # Write frame to output video
                 writer.write(annotated_frame)
@@ -331,7 +337,10 @@ class YOLODetector:
             cap.release()
             writer.release()
             if show_result:
-                cv2.destroyAllWindows()
+                try:
+                    cv2.destroyAllWindows()
+                except cv2.error:
+                    pass
                 
             # Calculate and log statistics
             total_time = time.time() - start_time

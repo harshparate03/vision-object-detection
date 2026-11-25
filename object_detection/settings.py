@@ -35,7 +35,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-$n-0-%a(a!c!u43w&_@)13+e33a9@wjt47q)*(9=t3$qk6ss9%')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', 'False') == 'True'
+DEBUG = os.environ.get('DEBUG', 'False' if os.environ.get('RENDER') else 'True') == 'True'
 
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
 
@@ -108,7 +108,7 @@ if DATABASE_URL:
     # Remove unsupported params that psycopg2 doesn't understand
     DATABASE_URL = DATABASE_URL.replace('&channel_binding=require', '').replace('?channel_binding=require&', '?').replace('?channel_binding=require', '')
     DATABASES = {'default': dj_database_url.config(default=DATABASE_URL, conn_max_age=600, ssl_require=True)}
-else:
+elif os.environ.get('DB_ENGINE') == 'mysql':
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.mysql',
@@ -117,6 +117,13 @@ else:
             'PASSWORD': os.environ.get('DB_PASSWORD', '1234'),
             'HOST': os.environ.get('DB_HOST', '127.0.0.1'),
             'PORT': os.environ.get('DB_PORT', '3306'),
+        }
+    }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
 
@@ -178,7 +185,7 @@ os.makedirs(MEDIA_ROOT, exist_ok=True)
 
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
-LOGIN_URL = 'signin/'
+LOGIN_URL = '/signin/'
 
 # ── Persistent login — keep users logged in for 30 days ──
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 30   # 30 days in seconds
@@ -190,7 +197,11 @@ CORS_ALLOW_ALL_ORIGINS = True
 # Render deployment — trust the app's own domain for CSRF
 CSRF_TRUSTED_ORIGINS = [
     f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME', 'localhost')}",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
 ]
+
+RESET_ADMIN_SECRET = os.environ.get('RESET_ADMIN_SECRET', '')
 
 # Production security settings (only active when DEBUG=False)
 if not DEBUG:

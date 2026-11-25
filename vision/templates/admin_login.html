@@ -22,16 +22,7 @@
                                 <br>
                                 <div class="separator-animated animated-true"></div>
                                 <form method="POST">
-                                    <!-- {% if messages %}
-                                    <div class="message-container">
-                                        {% for message in messages %}
-                                        <div class="theme-gradient">
-                                            {{ message }}
-                                        </div>
-                                        {% endfor %}
-                                    </div>
-                                    {% endif %} -->
-                                    <!-- {% if messages %}
+                                    {% if messages %}
                                     <div class="message-container">
                                         {% for message in messages %}
                                         <div class="theme-gradient">
@@ -39,7 +30,7 @@
                                         </div>
                                         {% endfor %}
                                     </div>
-                                    {% endif %} -->
+                                    {% endif %}
                                     {% csrf_token %}
                                     <div class="input-section mail-section">
                                         <div class="icon"><i class="feather-mail"></i></div>

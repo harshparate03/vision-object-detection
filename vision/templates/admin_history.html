@@ -6,7 +6,7 @@
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
         <div class="d-flex gap-2 align-items-center flex-wrap">
             <!-- Date Range Filter and Report Generation -->
-            <form action="/generate_history_report/" method="post" class="d-flex gap-2">
+            <form action="{% url 'generate_history_report' %}" method="post" class="d-flex gap-2">
                 {% csrf_token %}
                 <input type="date" name="start_date" id="startDate" class="form-control w-auto">
                 <input type="date" name="end_date" id="endDate" class="form-control w-auto">
@@ -26,18 +26,18 @@
 <table class="table table-striped" id="historyTable">
     <thead>
         <tr>
-            <td class="username">{{ upload.username }}</td>
+            <th>Username</th>
             <th>Email</th>
             <th>Image</th>
             <th>Detected Objects</th>
-            <td>Uploaded At</td>
+            <th>Uploaded At</th>
             <th>Action</th>
         </tr>
     </thead>
     <tbody>
         {% for upload in all_uploads %}
         <tr>
-            <td>{{ upload.username }}</td>
+            <td class="username">{{ upload.username }}</td>
             <td>{{ upload.email }}</td>
             <td><img src="{{ upload.image_url }}" alt="Uploaded Image" width="100" height="75" style="object-fit:cover; border-radius:4px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><span style="display:none; width:100px; height:75px; background:#2a2a3e; border-radius:4px; align-items:center; justify-content:center; color:#666; font-size:11px;">No Image</span></td>
             <td>
@@ -45,7 +45,7 @@
                 {{ obj.label }} - {{ obj.count }}<br>
                 {% endfor %}
             </td>
-            <td>{{ upload.uploaded_at }}</td>
+            <td data-date="{{ upload.uploaded_at_iso }}">{{ upload.uploaded_at }}</td>
             <td>
                 <form id="delete-form-{{ upload.id }}" action="{% url 'admin_delete_history' upload.id %}"
                     method="post">
@@ -86,40 +86,13 @@
         let rows = document.querySelectorAll("#historyTable tbody tr");
 
         rows.forEach(row => {
-            let usernameCell = row.querySelector("td:first-child"); // First column contains the username
+            let usernameCell = row.querySelector(".username");
             if (usernameCell) {
                 let username = usernameCell.textContent.trim().toLowerCase();
                 row.style.display = username.includes(filter) ? "" : "none";
             }
         });
     });
-
-    // document.getElementById("filterBtn").addEventListener("click", function () {
-    //     let startDate = document.getElementById("startDate").value;
-    //     let endDate = document.getElementById("endDate").value;
-
-    //     if (!startDate || !endDate) {
-    //         Swal.fire("Warning", "Please select both start and end dates.", "warning");
-    //         return;
-    //     }
-
-    //     let start = new Date(startDate).setHours(0, 0, 0, 0); // Normalize to start of the day
-    //     let end = new Date(endDate).setHours(23, 59, 59, 999); // Normalize to end of the day
-
-    //     let rows = document.querySelectorAll("#historyTable tbody tr");
-
-    //     rows.forEach(row => {
-    //         let dateCell = row.querySelector("td:nth-child(5)"); // "Uploaded At" column (5th column)
-    //         if (dateCell) {
-    //             let rowDate = new Date(dateCell.textContent.trim()).setHours(0, 0, 0, 0); // Normalize row date
-    //             if (rowDate >= start && rowDate <= end) {
-    //                 row.style.display = ""; // Show row if within range
-    //             } else {
-    //                 row.style.display = "none"; // Hide row if outside range
-    //             }
-    //         }
-    //     });
-    // });
 
     document.getElementById("filterBtn").addEventListener("click", function () {
         let startDate = document.getElementById("startDate").value;
@@ -130,31 +103,21 @@
             return;
         }
 
-        let start = new Date(startDate).setHours(0, 0, 0, 0); // Start of day
-        let end = new Date(endDate).setHours(23, 59, 59, 999); // End of day
+        let start = new Date(startDate + "T00:00:00").getTime();
+        let end = new Date(endDate + "T23:59:59").getTime();
 
         let rows = document.querySelectorAll("#historyTable tbody tr");
         let hasResults = false;
 
         rows.forEach(row => {
-            let dateCell = row.querySelector("td:nth-child(5)"); // "Uploaded At" column (5th column)
+            let dateCell = row.querySelector("td:nth-child(5)");
             if (dateCell) {
-                let rowDateStr = dateCell.textContent.trim();
-
-                // 🔹 Handle multiple date formats (Adjust if needed)
+                let rowDateStr = (dateCell.dataset.date || dateCell.textContent.replace(" IST", "")).trim();
                 let rowDateObj = new Date(rowDateStr);
-                if (isNaN(rowDateObj.getTime())) {
-                    // Try parsing if in format "DD-MM-YYYY"
-                    let parts = rowDateStr.split("-");
-                    if (parts.length === 3) {
-                        rowDateObj = new Date(parts[2], parts[1] - 1, parts[0]); // Convert to YYYY-MM-DD
-                    }
-                }
-
                 if (!isNaN(rowDateObj.getTime())) {
-                    let rowDate = rowDateObj.setHours(0, 0, 0, 0); // Normalize row date
-                    let isVisible = rowDate >= start && rowDate <= end;
-                    row.style.display = isVisible ? "" : "none"; // Toggle visibility
+                    let rowTime = rowDateObj.getTime();
+                    let isVisible = rowTime >= start && rowTime <= end;
+                    row.style.display = isVisible ? "" : "none";
                     if (isVisible) hasResults = true;
                 }
             }

@@ -1,9 +1,7 @@
+import re
 from django import forms
-from .models import UserProfile
 from django.core.validators import RegexValidator
-from django.core.exceptions import ValidationError
-from django.contrib.auth.hashers import check_password
-from django.contrib.auth.models import User
+from .models import Feedback, HelpMessage, UserProfile
 
 class SignUpForm(forms.ModelForm):
     confirm_password = forms.CharField(

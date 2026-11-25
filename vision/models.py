@@ -1,24 +1,6 @@
-import os
+from django.conf import settings
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
-
-
-
-
-
-# Create your models here.
-# class UserProfile(models.Model):
-#     username = models.CharField(max_length=150, unique=True)
-#     name = models.CharField(max_length=255)
-#     phone = models.CharField(max_length=20,unique=True)
-#     email = models.EmailField(unique=True)
-#     password = models.CharField(max_length=128)
-
-#     REQUIRED_FIELDS = ['email', 'name', 'phone']
-#     USERNAME_FIELD = 'username'
-
-#     def __str__(self):
-#         return self.username
 
 
 class UserProfileManager(BaseUserManager):
@@ -40,10 +22,12 @@ class UserProfileManager(BaseUserManager):
 
     def create_superuser(self, username, email, name, phone, password=None):
         user = self.create_user(username, email, name, phone, password)
+        user.role = 'admin'
         user.is_staff = True
         user.is_superuser = True
         user.save(using=self._db)
         return user
+
 
 class UserProfile(AbstractBaseUser, PermissionsMixin):
     ROLE_CHOICES = [
@@ -57,17 +41,16 @@ class UserProfile(AbstractBaseUser, PermissionsMixin):
     password = models.CharField(max_length=128)
     profile_image = models.TextField(blank=True, null=True)  # stores base64 data URL
     is_active = models.BooleanField(default=True)
+    is_staff = models.BooleanField(default=False)
     status = models.CharField(
         max_length=10,
         choices=[('Active', 'Active'), ('Inactive', 'Inactive')],
-        default='Active'  # Add this default value
+        default='Active'
     )
-    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='user')  # Role field
-    
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='user')
     date_joined = models.DateTimeField(auto_now_add=True, null=True, blank=True)
 
     objects = UserProfileManager()
-
 
     USERNAME_FIELD = 'username'
     REQUIRED_FIELDS = ['email', 'name', 'phone']
@@ -75,9 +58,6 @@ class UserProfile(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return self.username
 
-from django.db import models
-
-from django.db import models
 
 class HelpMessage(models.Model):
     name = models.CharField(max_length=100)
@@ -91,21 +71,14 @@ class HelpMessage(models.Model):
         return f"{self.name} - {self.subject}"
 
 
-# vision/models.py
-from django.conf import settings
-from django.db import models
-
 class Feedback(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)  # Use the custom user model
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     feedback = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"Feedback from {self.user.username} on {self.created_at}"
 
-# models.py
-from django.db import models
-from django.conf import settings
 
 class UploadHistory(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)

@@ -58,7 +58,9 @@
         let rows = document.querySelectorAll("#feedbackTable tbody tr");
 
         rows.forEach(row => {
-            let username = row.querySelector(".username").textContent.toLowerCase();
+            let usernameEl = row.querySelector(".username");
+            if (!usernameEl) return;
+            let username = usernameEl.textContent.toLowerCase();
             row.style.display = username.includes(filter) ? "" : "none";
         });
     });

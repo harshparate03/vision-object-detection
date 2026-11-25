@@ -95,11 +95,13 @@ def main():
                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
             # Show the frame
-            cv2.imshow("YOLOv8 Detection (Mirrored)", frame)
-            cv2.setWindowProperty("YOLOv8 Detection (Mirrored)", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-
-            # Break loop on 'q' press
-            if cv2.waitKey(1) & 0xFF == ord('q'):
+            try:
+                cv2.imshow("YOLOv8 Detection (Mirrored)", frame)
+                cv2.setWindowProperty("YOLOv8 Detection (Mirrored)", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+            except cv2.error:
+                print("GUI display unavailable in headless OpenCV environment.")
                 break
 
     except Exception as e:
@@ -110,7 +112,10 @@ def main():
     finally:
         print("Cleaning up...")
         cap.release()
-        cv2.destroyAllWindows()
+        try:
+            cv2.destroyAllWindows()
+        except cv2.error:
+            pass
 
 if __name__ == "__main__":
     main()

@@ -252,6 +252,7 @@
         .vp-speed-select { width: 52px; font-size: 10px; }
         .vp-download-btn span { display: none; }
     }
+    #result-area {
         width: 100%;
         max-width: 920px;
         margin: 30px auto 0;
@@ -594,6 +595,7 @@
                                 </form>
                                 <!-- Video Upload -->
                                 <form id="video-upload-form" enctype="multipart/form-data">
+                                    {% csrf_token %}
                                     <input type="file" id="video-upload-input" name="video" accept="video/*" style="display:none;" />
                                     <button type="button" class="btn-default btn-large"
                                         onclick="document.getElementById('video-upload-input').click();">Video</button>
@@ -1144,9 +1146,33 @@
                                         if (!detectionActive) return;
                                         if (data.status === 'success') {
                                             var overlay = document.getElementById('detection-overlay');
-                                            var img = new Image();
-                                            img.onload = function(){ if (detectionActive && overlay) overlay.getContext('2d').drawImage(img,0,0,overlay.width,overlay.height); };
-                                            img.src = data.annotated_image_url;
+                                            if (overlay) {
+                                                var ctx = overlay.getContext('2d');
+                                                ctx.clearRect(0, 0, overlay.width, overlay.height);
+                                                if (Array.isArray(data.boxes) && data.image_width && data.image_height) {
+                                                    var sx = overlay.width / data.image_width;
+                                                    var sy = overlay.height / data.image_height;
+                                                    ctx.lineWidth = 3;
+                                                    ctx.font = 'bold 14px sans-serif';
+                                                    data.boxes.forEach(function(b) {
+                                                        var bx = b.x1 * sx, by = b.y1 * sy;
+                                                        var bw = (b.x2 - b.x1) * sx, bh = (b.y2 - b.y1) * sy;
+                                                        ctx.strokeStyle = '#00e1ff';
+                                                        ctx.strokeRect(bx, by, bw, bh);
+                                                        var txt = b.label + ' ' + Math.round((b.confidence || 0) * 100) + '%';
+                                                        var tw = ctx.measureText(txt).width + 8;
+                                                        var ly = Math.max(0, by - 22);
+                                                        ctx.fillStyle = '#00e1ff';
+                                                        ctx.fillRect(bx, ly, tw, 22);
+                                                        ctx.fillStyle = '#000';
+                                                        ctx.fillText(txt, bx + 4, ly + 16);
+                                                    });
+                                                } else if (data.annotated_image_url) {
+                                                    var img = new Image();
+                                                    img.onload = function(){ if (detectionActive && overlay) overlay.getContext('2d').drawImage(img,0,0,overlay.width,overlay.height); };
+                                                    img.src = data.annotated_image_url;
+                                                }
+                                            }
                                             var list = document.getElementById('webcam-detection-list'); list.innerHTML = '';
                                             data.detected_objects.forEach(function(obj){ var li = document.createElement('li'); li.textContent = obj.label+': '+obj.count; list.appendChild(li); });
                                             document.getElementById('webcam-detection-results').style.display = 'block';
@@ -1164,8 +1190,10 @@
                             canvas.width = video.videoWidth || 640; canvas.height = video.videoHeight || 480;
                             canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
                             canvas.toBlob(function(blob){
-                                var link = document.createElement('a'); link.href = URL.createObjectURL(blob);
+                                var url = URL.createObjectURL(blob);
+                                var link = document.createElement('a'); link.href = url;
                                 link.download = 'screenshot.jpg'; document.body.appendChild(link); link.click(); document.body.removeChild(link);
+                                setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
                             }, 'image/jpeg', 0.95);
                         }
 
@@ -1552,7 +1580,7 @@
                                 <div class="inner">
                                     <ul class="footer-link link-hover">
                                         <li><a href="/about">About</a></li>
-                                        <li><a href="/service">Service</a></li>
+                                        <li><a href="/services">Service</a></li>
                                         <li><a href="/contact">Contact</a></li>
                                         <li><a href="/terms_policy">Terms Policy</a></li>
                                     </ul>
@@ -1658,62 +1686,58 @@
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
 
-            const logoUrl = '/static/images/logo_white.png';
-            doc.setFont("monospace", "bold");
-            doc.setFontSize(18);
-            doc.addImage(logoUrl, 'PNG', 11, 10, 25, 23);
-            doc.setFont("courier");
-            doc.text("Vision", 32, 23);
-            doc.setFont("Arial");
-            doc.setFontSize(14);
-            doc.setTextColor(0, 0, 0);
-            doc.text("Processed Image Report", doc.internal.pageSize.width / 2, 22, { align: "center" });
-            doc.setLineWidth(0.5);
-            doc.line(10, 30, 200, 30);
-
-            const detectionList = document.getElementById("detection-list");
-            const detectedObjects = Array.from(detectionList.children).map(item => item.textContent);
-            doc.setFont("helvetica", "normal");
-            doc.setFontSize(12);
-            doc.text("Detected Objects:", 10, 45);
-            let yPosition = 50;
-            detectedObjects.forEach((object, index) => {
-                doc.text(`${index + 1}. ${object}`, 10, yPosition);
-                yPosition += 10;
-            });
-
-            // **Add Processed Image**
-            const img = document.getElementById("annotated-image");
-            if (img && img.src && img.src.startsWith('data:')) {
-                try {
-                    doc.addImage(img.src, "JPEG", 50, yPosition, 100, 80);
-                    yPosition += 90;
-                } catch (e) {
-                    doc.text("[Image could not be embedded]", 50, yPosition);
-                    yPosition += 10;
+            function buildPdf(logoImg) {
+                doc.setFont("monospace", "bold");
+                doc.setFontSize(18);
+                if (logoImg) {
+                    try { doc.addImage(logoImg, 'PNG', 11, 10, 25, 23); } catch (e) {}
                 }
+                doc.setFont("courier");
+                doc.text("Vision", 32, 23);
+                doc.setFont("Arial");
+                doc.setFontSize(14);
+                doc.setTextColor(0, 0, 0);
+                doc.text("Processed Image Report", doc.internal.pageSize.width / 2, 22, { align: "center" });
+                doc.setLineWidth(0.5);
+                doc.line(10, 30, 200, 30);
+
+                const detectionList = document.getElementById("detection-list");
+                const detectedObjects = Array.from(detectionList.children).map(item => item.textContent);
+                doc.setFont("helvetica", "normal");
+                doc.setFontSize(12);
+                doc.text("Detected Objects:", 10, 45);
+                let yPosition = 50;
+                detectedObjects.forEach((object, index) => {
+                    doc.text(`${index + 1}. ${object}`, 10, yPosition);
+                    yPosition += 10;
+                });
+
+                const img = document.getElementById("annotated-image");
+                if (img && img.src && img.src.startsWith('data:')) {
+                    try {
+                        doc.addImage(img.src, "JPEG", 50, yPosition, 100, 80);
+                        yPosition += 90;
+                    } catch (e) {
+                        doc.text("[Image could not be embedded]", 50, yPosition);
+                        yPosition += 10;
+                    }
+                }
+
+                const pageHeight = doc.internal.pageSize.height;
+                const footerY = pageHeight - 15;
+                doc.setFont("Arial");
+                doc.setFontSize(12);
+                doc.setTextColor(0, 0, 0);
+                doc.text(" Generated by Vision ", doc.internal.pageSize.width / 2, footerY, { align: "center" });
+
+                doc.save("processed_image_report_by_vision.pdf");
             }
 
-            // **Footer Section**
-            const pageHeight = doc.internal.pageSize.height; // Get page height
-            const footerY = pageHeight - 15; // Footer position
-
-            // Add logo in the footer
-            // doc.addImage(logoUrl, 'PNG', 10, footerY - 5, 20, 15);
-
-            // Add "Vision" name next to the footer logo
-            // doc.setFont("monospace", "bold");
-            // doc.setFontSize(20);
-            // doc.text("Vision", 32, footerY + 5);
-
-            // Centered Footer Title
-            doc.setFont("Arial");
-            doc.setFontSize(12);
-            doc.setTextColor(0, 0, 0);
-            doc.text(" Generated by Vision ", doc.internal.pageSize.width / 2, footerY, { align: "center" });
-
-            // **Save the PDF**
-            doc.save("processed_image_report_by_vision.pdf");
+            const logoImg = new Image();
+            logoImg.crossOrigin = 'anonymous';
+            logoImg.onload = function () { buildPdf(logoImg); };
+            logoImg.onerror = function () { buildPdf(null); };
+            logoImg.src = "{% static 'images/logo_white.png' %}";
         }
 
 
@@ -1749,56 +1773,6 @@
         });
     </script>
 
-
-    <!-- video script -->
-    <script>
-        document.getElementById('video-upload-form').addEventListener('submit', function (event) {
-            event.preventDefault();
-            const videoFile = document.getElementById("video-upload").files[0];
-            if (!videoFile) { alert("Please select a video file."); return; }
-
-            const formData = new FormData();
-            formData.append("video", videoFile);
-
-            document.getElementById("ai-loader-video").style.display = "block";
-            document.getElementById("annotated-video-container").style.display = "none";
-
-            fetch("{% url 'upload_video' %}", {
-                method: "POST",
-                body: formData,
-                headers: { "X-CSRFToken": getCsrfToken() }
-            })
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById("ai-loader-video").style.display = "none";
-                    if (data.status === "success" && data.video_url) {
-                        if (data.frames) { _vp.frames = data.frames; _vp.fps = data.fps || 5; }
-                        vpInitVideo(data.video_url);
-                        if (data.detected_objects && data.detected_objects.length > 0) {
-                            const list = document.getElementById("video-detection-list");
-                            list.innerHTML = "";
-                            data.detected_objects.forEach(obj => {
-                                const li = document.createElement("li");
-                                li.textContent = obj.label + ": " + obj.count;
-                                li.style.color = "white";
-                                list.appendChild(li);
-                            });
-                            document.getElementById("detection-results-video").style.display = "block";
-                        }
-                        setTimeout(() => document.getElementById("annotated-video-container").scrollIntoView({ behavior: "smooth", block: "center" }), 300);
-                    } else if (data.status === "success" && data.frames && data.frames.length > 0) {
-                        vpInit(data.frames, data.fps || 5);
-                        setTimeout(() => document.getElementById("annotated-video-container").scrollIntoView({ behavior: "smooth", block: "center" }), 300);
-                    } else {
-                        alert("Error: " + (data.message || "Video processing failed."));
-                    }
-                })
-                .catch(error => {
-                    document.getElementById("ai-loader-video").style.display = "none";
-                    alert("Failed to process video: " + error.message);
-                });
-        });
-    </script>
 
 </body>
 
