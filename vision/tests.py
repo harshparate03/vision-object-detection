@@ -225,3 +225,14 @@ class VisionSecurityAndFlowTests(TestCase):
             self.assertEqual(self.client.get(reverse('start_detection')).status_code, 405)
             self.assertEqual(self.client.post(reverse('start_detection')).status_code, 410)
         capture.assert_not_called()
+
+
+    def test_signin_and_dashboard_with_production_settings(self):
+        from django.test import override_settings
+        with override_settings(DEBUG=False, SESSION_COOKIE_SECURE=True, CSRF_COOKIE_SECURE=True):
+            response = self.client.post(reverse('signin'), {
+                'email': self.user.email, 'password': 'Password123!',
+            }, secure=True)
+            self.assertRedirects(response, reverse('dashboard'), fetch_redirect_response=False)
+            dashboard = self.client.get(reverse('dashboard'), secure=True)
+            self.assertEqual(dashboard.status_code, 200)
