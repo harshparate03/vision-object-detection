@@ -1,6 +1,11 @@
 import re
 from django import forms
 from django.core.validators import RegexValidator
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
+
+PHONE_PATTERN = r"^\+?[0-9]{10,15}$"
+phone_validator = RegexValidator(PHONE_PATTERN, "Enter a phone number with 10 to 15 digits, optionally starting with +.")
 from .models import Feedback, HelpMessage, UserProfile
 
 class SignUpForm(forms.ModelForm):
@@ -20,7 +25,7 @@ class SignUpForm(forms.ModelForm):
     )
     phone = forms.CharField(
         validators=[
-            RegexValidator(r'^\+?1?\d{9,15}$', 'Phone number is invalid')
+            phone_validator
         ],
         widget=forms.TextInput(attrs={'placeholder': 'Enter Phone Number'}),
         error_messages={'required': 'Phone number is required!'}
@@ -52,6 +57,12 @@ class SignUpForm(forms.ModelForm):
 
         if password and confirm_password and password != confirm_password:
             self.add_error('confirm_password', 'Passwords do not match!')
+        if password:
+            candidate = UserProfile(**{key: cleaned_data.get(key, '') for key in ('username', 'name', 'email', 'phone')})
+            try:
+                validate_password(password, candidate)
+            except ValidationError as error:
+                self.add_error('password', error)
         return cleaned_data
     
 
@@ -189,3 +200,11 @@ class CustomUserForm(forms.ModelForm):
     #         self.fields['profile_image'].label = mark_safe(
     #             f'<img src="{self.instance.profile_image.url}" width="100" height="100" class="rounded-circle mb-2">'
     #         )
+
+
+class ProfileDetailsForm(forms.ModelForm):
+    phone = forms.CharField(max_length=20, validators=[phone_validator])
+
+    class Meta:
+        model = UserProfile
+        fields = ['name', 'email', 'phone']

@@ -34,7 +34,7 @@ from reportlab.lib.pagesizes import landscape, letter
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Image as ReportLabImage, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from .forms import CustomUserForm, FeedbackForm, HelpMessageForm, SignUpForm
+from .forms import CustomUserForm, FeedbackForm, HelpMessageForm, SignUpForm, ProfileDetailsForm, PHONE_PATTERN
 from .models import Feedback, HelpMessage, UploadHistory, UserProfile
 from .sms_utils import send_sms
 
@@ -168,7 +168,7 @@ def forgot(request):
     error_message = None
     if request.method == 'POST':
         phone_number = (request.POST.get('phone_number') or '').strip()
-        phone_pattern = r'^\+?[0-9]{10,15}$'
+        phone_pattern = PHONE_PATTERN
         if not re.match(phone_pattern, phone_number):
             error_message = "Invalid phone number format. Please enter a valid number."
             return render(request, 'forgot.html', {'error': error_message})
@@ -280,6 +280,24 @@ def remove_profile_image(request):
     return JsonResponse({'success': True, 'default_url': static('images/default.jpg')})
 
 
+def _profile_image_data_url(image):
+    if image.size > 5 * 1024 * 1024:
+        raise ValidationError('File too large. Max 5MB.')
+    image_bytes = image.read()
+    try:
+        with PILImage.open(BytesIO(image_bytes)) as probe:
+            image_format = probe.format
+            if image_format not in ('JPEG', 'PNG', 'GIF', 'WEBP') or probe.width * probe.height > 16000000:
+                raise ValueError('Unsupported or oversized image')
+            probe.verify()
+        with PILImage.open(BytesIO(image_bytes)) as probe:
+            probe.load()
+    except Exception:
+        raise ValidationError('Upload a valid JPEG, PNG, GIF or WebP image of at most 16 megapixels.')
+    mime = {'JPEG': 'image/jpeg', 'PNG': 'image/png', 'GIF': 'image/gif', 'WEBP': 'image/webp'}[image_format]
+    return f"data:{mime};base64,{base64.b64encode(image_bytes).decode('ascii')}"
+
+
 @login_required
 def upload_profile_image_ajax(request):
     if request.method != 'POST':
@@ -288,45 +306,30 @@ def upload_profile_image_ajax(request):
     image = request.FILES.get('profile_image')
     if not image:
         return JsonResponse({'success': False, 'error': 'No image provided'}, status=400)
-    allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-    if image.content_type not in allowed_types:
-        return JsonResponse({'success': False, 'error': 'Invalid file type. Use JPEG, PNG, GIF or WebP.'}, status=400)
-    if image.size > 5 * 1024 * 1024:
-        return JsonResponse({'success': False, 'error': 'File too large. Max 5MB.'}, status=400)
     try:
-        img_data = base64.b64encode(image.read()).decode('utf-8')
-        data_url = f"data:{image.content_type};base64,{img_data}"
+        data_url = _profile_image_data_url(image)
+    except ValidationError as error:
+        return JsonResponse({'success': False, 'error': ' '.join(error.messages)}, status=400)
+    try:
         user.profile_image = data_url
         user.save(update_fields=['profile_image'])
         return JsonResponse({'success': True, 'image_url': data_url})
     except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+        logger.exception('Profile image save failed')
+        return JsonResponse({'success': False, 'error': 'Could not save profile image.'}, status=500)
 
 
 @login_required
 def view_profile(request):
     user = request.user
     if request.method == "POST":
-        new_name = (request.POST.get("name") or "").strip()
-        new_email = (request.POST.get("email") or "").strip()
-        new_phone = (request.POST.get("phone") or "").strip()
-
-        if not new_name or not new_email or not new_phone:
-            messages.error(request, "Name, email, and phone are required.")
-            return redirect("view_profile")
-
-        if UserProfile.objects.filter(email=new_email).exclude(id=user.id).exists():
-            messages.error(request, "This email is already in use.")
-            return redirect("view_profile")
-
-        if UserProfile.objects.filter(phone=new_phone).exclude(id=user.id).exists():
-            messages.error(request, "This phone number is already in use.")
-            return redirect("view_profile")
-
-        user.name = new_name
-        user.email = new_email
-        user.phone = new_phone
-        user.save()
+        form = ProfileDetailsForm(request.POST, instance=user)
+        if not form.is_valid():
+            for errors in form.errors.values():
+                for error in errors:
+                    messages.error(request, error)
+            return redirect('view_profile')
+        form.save()
         messages.success(request, "Profile updated successfully!")
         return redirect("view_profile")
 
@@ -655,8 +658,11 @@ def edit_user(request, user_id):
             user = form.save(commit=False)
             if 'profile_image' in request.FILES:
                 img = request.FILES['profile_image']
-                img_data = base64.b64encode(img.read()).decode('utf-8')
-                user.profile_image = f"data:{img.content_type};base64,{img_data}"
+                try:
+                    user.profile_image = _profile_image_data_url(img)
+                except ValidationError as error:
+                    form.add_error(None, error)
+                    return render(request, 'edit_user.html', {'form': form, 'edit_user': user})
             user.save()
             messages.success(request, 'User updated successfully!')
             return redirect('admin_dashboard')
@@ -929,6 +935,12 @@ def filter_users(request):
     return JsonResponse({"error": "Invalid date range"}, status=400)
 
 
+def _wrap_report_cells(rows):
+    style = getSampleStyleSheet()['Normal']
+    return [[Paragraph(escape(cell).replace('\n', '<br/>'), style)
+             if isinstance(cell, str) else cell for cell in row] for row in rows]
+
+
 @login_required
 def generate_report(request):
     if not _is_admin(request.user):
@@ -984,7 +996,8 @@ def generate_report(request):
         data.append([index_num, img, username, name, email, phone, join_date, status])
 
     col_widths = [50, 60, 100, 100, 160, 100, 100, 80]
-    table = Table(data, colWidths=col_widths)
+    col_widths = [width * doc.width / sum(col_widths) for width in col_widths]
+    table = Table(_wrap_report_cells(data), colWidths=col_widths, repeatRows=1)
     table.setStyle(TableStyle([
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
@@ -1064,7 +1077,8 @@ def generate_history_report(request):
         ])
 
     col_widths = [30, 80, 120, 150, 80, 60]
-    table = Table(data, colWidths=col_widths)
+    col_widths = [width * doc.width / sum(col_widths) for width in col_widths]
+    table = Table(_wrap_report_cells(data), colWidths=col_widths, repeatRows=1)
     table.setStyle(TableStyle([
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('BACKGROUND', (0, 0), (-1, 0), colors.gray),
@@ -1119,7 +1133,8 @@ def generate_help_message_report(request):
                 data_table.append([index_num, name, email, phone, subject, msg_text, date])
 
             col_widths = [40, 80, 120, 80, 80, 100, 80]
-            table = Table(data_table, colWidths=col_widths)
+            col_widths = [width * doc.width / sum(col_widths) for width in col_widths]
+            table = Table(_wrap_report_cells(data_table), colWidths=col_widths, repeatRows=1)
             table.setStyle(TableStyle([
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
                 ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
@@ -1186,7 +1201,8 @@ def generate_feedback_report(request):
                 data.append([index_num, user, feedback_text, created_at])
 
             col_widths = [50, 100, 250, 120]
-            table = Table(data, colWidths=col_widths)
+            col_widths = [width * doc.width / sum(col_widths) for width in col_widths]
+            table = Table(_wrap_report_cells(data), colWidths=col_widths, repeatRows=1)
             table.setStyle(TableStyle([
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
                 ('ALIGN', (0, 0), (-1, -1), 'CENTER'),

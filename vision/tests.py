@@ -315,3 +315,73 @@ class VisionSecurityAndFlowTests(TestCase):
         self.assertEqual(len(data['frames']), 20)
         self.assertEqual(data['duration'], 100)
         self.assertAlmostEqual(len(data['frames']) / data['fps'], 100)
+
+
+    def test_signup_applies_password_policy_and_phone_rules(self):
+        from .forms import SignUpForm
+        details = {'username': 'newuser', 'name': 'New User', 'email': 'new@example.com',
+                   'phone': '9876543211', 'password': '12345678', 'confirm_password': '12345678'}
+        form = SignUpForm(data=details)
+        self.assertFalse(form.is_valid())
+        self.assertIn('password', form.errors)
+        details.update(password='Zebra!River92#Moon', confirm_password='Zebra!River92#Moon')
+        for phone in ['123456789', '1' * 16, 'abc', '+919876543210', '9876543211']:
+            details['phone'] = phone
+            form = SignUpForm(data=details)
+            self.assertEqual(form.is_valid(), phone in ['+919876543210', '9876543211'], form.errors)
+
+    def test_profile_rejects_invalid_and_duplicate_details(self):
+        self.client.force_login(self.user)
+        original = (self.user.email, self.user.phone, self.user.name)
+        for changes in [
+            {'email': 'invalid-email'}, {'phone': 'abc'}, {'phone': '123456789'},
+            {'email': self.admin.email}, {'phone': self.admin.phone}, {'name': 'x' * 256},
+        ]:
+            details = {'name': 'Alice', 'email': self.user.email, 'phone': self.user.phone}
+            details.update(changes)
+            self.assertEqual(self.client.post(reverse('view_profile'), details).status_code, 302)
+            self.user.refresh_from_db()
+            self.assertEqual((self.user.email, self.user.phone, self.user.name), original)
+        self.client.post(reverse('view_profile'), {
+            'name': 'Alice Updated', 'email': 'updated@example.com', 'phone': '+919876543211'})
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, 'updated@example.com')
+        self.assertEqual(self.user.phone, '+919876543211')
+
+    def test_profile_upload_verifies_content_and_uses_actual_mime(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        self.client.force_login(self.user)
+        response = self.client.post(reverse('upload_profile_image_ajax'), {
+            'profile_image': SimpleUploadedFile('fake.png', b'not an image', content_type='image/png')})
+        self.assertEqual(response.status_code, 400)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.profile_image)
+        response = self.client.post(reverse('upload_profile_image_ajax'), {
+            'profile_image': SimpleUploadedFile('real.png', self._jpeg_bytes(), content_type='image/png')})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['image_url'].startswith('data:image/jpeg;base64,'))
+
+    def test_all_pdf_reports_fit_page_width(self):
+        import json
+        from reportlab.platypus import Table as RealTable
+        Feedback.objects.create(user=self.user, feedback='Long feedback ' * 30)
+        UploadHistory.objects.create(user=self.user, detected_objects='[{"label":"person","count":1}]')
+        self.client.force_login(self.admin)
+        cases = [
+            ('generate_report', {}, 648),
+            ('generate_history_report', {}, 468),
+            ('generate_feedback_report', {'start_date': '2000-01-01', 'end_date': '2100-01-01'}, 468),
+            ('generate_help_message_report', {'start_date': '2000-01-01', 'end_date': '2100-01-01',
+              'messages': [{'name': 'Alice', 'email': 'alice@example.com', 'phone': '9876543210',
+                            'subject': 'Help', 'message': 'Long message ' * 30, 'date': '2026-11-25'}]}, 468),
+        ]
+        for route, payload, available_width in cases:
+            with patch('vision.views.Table', wraps=RealTable) as table:
+                if route == 'generate_help_message_report':
+                    response = self.client.post(reverse(route), json.dumps(payload), content_type='application/json')
+                else:
+                    response = self.client.post(reverse(route), payload)
+            self.assertEqual(response.status_code, 200, route)
+            self.assertTrue(response.content.startswith(b'%PDF'), route)
+            self.assertAlmostEqual(sum(table.call_args.kwargs['colWidths']), available_width)
+            self.assertEqual(table.call_args.kwargs['repeatRows'], 1)
