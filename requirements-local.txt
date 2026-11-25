@@ -1,0 +1,5 @@
+# Install optional local YOLO inference support after requirements.txt.
+-r requirements.txt
+# Ultralytics installs GUI OpenCV; use this file for desktop/local inference only.
+ultralytics>=8.3,<9
+torch>=2.2,<3

@@ -97,6 +97,7 @@ class YOLODetector:
         self.frame_count = 0
         
     def _load_model(self):
+        import torch
         """Load the YOLO model"""
         try:
             # Import YOLO here to avoid import errors if missing

@@ -217,3 +217,21 @@ if not DEBUG:
     X_FRAME_OPTIONS = 'DENY'
 
 mimetypes.add_type("video/mp4", ".mp4", True)  # Ensure MP4 is recognized
+
+
+# Send production request exceptions to Render's captured stderr as well.
+# Django's default console handler only emits these while DEBUG is enabled.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'server': {'format': '{asctime} {levelname} {name}: {message}', 'style': '{'},
+    },
+    'handlers': {
+        'console': {'class': 'logging.StreamHandler', 'formatter': 'server'},
+    },
+    'loggers': {
+        'django': {'handlers': ['console'], 'level': 'ERROR', 'propagate': False},
+        'vision': {'handlers': ['console'], 'level': 'ERROR', 'propagate': False},
+    },
+}

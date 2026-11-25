@@ -259,7 +259,7 @@ class YOLODetector:
         """
         try:
             # Handle numeric camera index
-            if isinstance(video_path, (int, str)) and video_path.isdigit():
+            if isinstance(video_path, int) or (isinstance(video_path, str) and video_path.isdigit()):
                 video_path = int(video_path)
                 self.logger.info(f"Opening camera index: {video_path}")
             else:

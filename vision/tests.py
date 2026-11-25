@@ -160,3 +160,68 @@ class VisionSecurityAndFlowTests(TestCase):
         buf = BytesIO()
         Image.new('RGB', (10, 10), color='blue').save(buf, format='JPEG')
         return buf.getvalue()
+
+
+    def test_otp_expiry_and_attempt_limit(self):
+        import time
+        for expiry, attempts in [(time.time() - 1, 0), (time.time() + 300, 5)]:
+            session = self.client.session
+            session.update({'user_id': self.user.id, 'otp_code': '123456', 'otp_verified': False,
+                            'otp_expires_at': expiry, 'otp_attempts': attempts})
+            session.save()
+            response = self.client.post(reverse('verify_otp'), {'otp': '123456'})
+            self.assertRedirects(response, reverse('forgot'))
+            self.assertNotIn('otp_code', self.client.session)
+
+    def test_delete_user_requires_post(self):
+        self.client.force_login(self.admin)
+        url = reverse('delete_user', args=[self.user.id])
+        self.assertEqual(self.client.get(url).status_code, 405)
+        self.assertTrue(UserProfile.objects.filter(pk=self.user.pk).exists())
+        self.assertEqual(self.client.post(url).status_code, 302)
+        self.assertFalse(UserProfile.objects.filter(pk=self.user.pk).exists())
+
+    def test_image_upload_requires_csrf(self):
+        from django.test import Client
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.user)
+        self.assertEqual(client.post(reverse('upload_image')).status_code, 403)
+
+    def test_image_dimension_limit_before_detection(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        image = BytesIO()
+        Image.new('RGB', (4001, 4000)).save(image, format='PNG')
+        self.client.force_login(self.user)
+        with patch('vision.views.detect_with_roboflow') as detect:
+            response = self.client.post(reverse('upload_image'), {
+                'image': SimpleUploadedFile('large.png', image.getvalue(), content_type='image/png')})
+        self.assertEqual(response.status_code, 400)
+        detect.assert_not_called()
+
+    def test_video_service_errors_are_not_success(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from unittest.mock import MagicMock
+        import numpy as np
+        self.client.force_login(self.user)
+        capture = MagicMock()
+        capture.isOpened.return_value = True
+        capture.get.return_value = 25
+        capture.read.return_value = (True, np.zeros((24, 24, 3), dtype=np.uint8))
+        with patch('vision.views.ROBOFLOW_API_KEY', 'test'), \
+             patch('vision.views.cv2.VideoCapture', return_value=capture), \
+             patch('vision.views.http_requests.post') as post:
+            post.return_value.raise_for_status.side_effect = RuntimeError('upstream failure')
+            response = self.client.post(reverse('upload_video'), {
+                'video': SimpleUploadedFile('test.mp4', b'test')})
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json()['status'], 'error')
+        capture.release.assert_called_once()
+
+    def test_legacy_camera_cannot_open_server_camera(self):
+        with patch('vision.views.cv2.VideoCapture') as capture:
+            self.assertEqual(self.client.get(reverse('video_feed')).status_code, 302)
+            self.client.force_login(self.user)
+            self.assertEqual(self.client.get(reverse('video_feed')).status_code, 410)
+            self.assertEqual(self.client.get(reverse('start_detection')).status_code, 405)
+            self.assertEqual(self.client.post(reverse('start_detection')).status_code, 410)
+        capture.assert_not_called()

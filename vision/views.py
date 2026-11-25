@@ -5,7 +5,8 @@ import io
 import json
 import logging
 import os
-import random
+import secrets
+import time
 import re
 import tempfile
 from datetime import datetime
@@ -27,7 +28,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.templatetags.static import static
 from django.utils.dateparse import parse_date
 from django.utils.timezone import localtime, now
-from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import landscape, letter
 from reportlab.lib.styles import getSampleStyleSheet
@@ -174,12 +175,14 @@ def forgot(request):
 
         try:
             user = UserProfile.objects.get(phone=phone_number)
-            otp_code = f"{random.randint(100000, 999999)}"
+            otp_code = str(secrets.randbelow(900000) + 100000)
             send_sms(phone_number, f"Your OTP is: {otp_code}")
 
             request.session['user_id'] = user.id
             request.session['otp_code'] = otp_code
             request.session['otp_verified'] = False
+            request.session['otp_expires_at'] = time.time() + 300
+            request.session['otp_attempts'] = 0
             return redirect('verify_otp')
         except UserProfile.DoesNotExist:
             error_message = "User with this phone number does not exist."
@@ -194,11 +197,17 @@ def verify_otp(request):
     if not request.session.get('otp_code') or not request.session.get('user_id'):
         return redirect('forgot')
 
+    if time.time() >= request.session.get('otp_expires_at', 0) or request.session.get('otp_attempts', 0) >= 5:
+        for key in ('otp_code', 'user_id', 'otp_verified', 'otp_expires_at', 'otp_attempts'):
+            request.session.pop(key, None)
+        return redirect('forgot')
+
     if request.method == 'POST':
+        request.session['otp_attempts'] = request.session.get('otp_attempts', 0) + 1
         entered_otp = (request.POST.get('otp') or '').strip()
         generated_otp = request.session.get('otp_code')
 
-        if generated_otp and entered_otp and entered_otp == generated_otp:
+        if generated_otp and entered_otp and secrets.compare_digest(entered_otp, generated_otp):
             request.session['otp_verified'] = True
             return redirect('password_reset')
         return render(request, 'verify_otp.html', {'error': 'Invalid OTP'})
@@ -221,7 +230,7 @@ def services(request):
 def password_reset(request):
     user_id = request.session.get('user_id')
     otp_verified = request.session.get('otp_verified', False)
-    if not user_id or not otp_verified:
+    if not user_id or not otp_verified or time.time() >= request.session.get('otp_expires_at', 0):
         return redirect('forgot')
 
     if request.method == 'POST':
@@ -247,6 +256,8 @@ def password_reset(request):
         user.set_password(new_password)
         user.save()
 
+        request.session.pop('otp_expires_at', None)
+        request.session.pop('otp_attempts', None)
         request.session.pop('otp_code', None)
         request.session.pop('otp_verified', None)
         request.session.pop('user_id', None)
@@ -529,14 +540,22 @@ def detect_with_roboflow(image):
     return annotated, detections, boxes
 
 
-@csrf_exempt
 def upload_image(request):
     if not request.user.is_authenticated:
         return JsonResponse({'status': 'error', 'message': 'Authentication required'}, status=401)
     if request.method == 'POST' and request.FILES.get('image'):
         try:
             uploaded_file = request.FILES['image']
+            if uploaded_file.size > 10 * 1024 * 1024:
+                return JsonResponse({'status': 'error', 'message': 'Image too large. Max 10MB.'}, status=413)
             file_bytes = uploaded_file.read()
+            try:
+                with PILImage.open(BytesIO(file_bytes)) as probe:
+                    if probe.width * probe.height > 16000000:
+                        raise ValueError('Image exceeds 16 megapixels.')
+                    probe.verify()
+            except Exception:
+                return JsonResponse({'status': 'error', 'message': 'Invalid image or image exceeds 16 megapixels.'}, status=400)
             np_arr = np.frombuffer(file_bytes, np.uint8)
             image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
             if image is None:
@@ -609,6 +628,8 @@ def delete_user(request, user_id):
         messages.error(request, "User not found.")
         return redirect('admin_dashboard')
 
+    if request.method != 'POST':
+        return HttpResponse(status=405, headers={'Allow': 'POST'})
     username = user.username
     user.delete()
     messages.success(request, f'User "{username}" has been deleted successfully!')
@@ -670,9 +691,11 @@ def upload_video(request):
         tmp_path = None
         cap = None
         try:
+            if not ROBOFLOW_API_KEY:
+                return JsonResponse({'status': 'error', 'message': 'Detection service is not configured.'}, status=503)
             video_file = request.FILES['video']
             if video_file.size > 50 * 1024 * 1024:
-                return JsonResponse({'status': 'error', 'message': 'Video too large. Max 50MB.'})
+                return JsonResponse({'status': 'error', 'message': 'Video too large. Max 50MB.'}, status=413)
 
             with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp:
                 for chunk in video_file.chunks():
@@ -681,7 +704,7 @@ def upload_video(request):
 
             cap = cv2.VideoCapture(tmp_path)
             if not cap.isOpened():
-                return JsonResponse({'status': 'error', 'message': 'Could not read video file'})
+                return JsonResponse({'status': 'error', 'message': 'Could not read video file'}, status=400)
 
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -719,7 +742,11 @@ def upload_video(request):
                         timeout=8,
                         verify=ROBOFLOW_SSL_VERIFY,
                     )
-                    preds = resp.json().get('predictions', [])
+                    resp.raise_for_status()
+                    result = resp.json()
+                    if not isinstance(result.get('predictions'), list):
+                        raise ValueError('Invalid detection response')
+                    preds = result['predictions']
                     annotated = frame.copy()
                     for pred in preds:
                         label = pred['class']
@@ -733,7 +760,8 @@ def upload_video(request):
                         cv2.putText(annotated, text, (x1 + 2, max(y1 - 4, 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
                         all_detections[label] = all_detections.get(label, 0) + 1
                 except Exception:
-                    annotated = frame
+                    logger.exception('Video detection service failed')
+                    return JsonResponse({'status': 'error', 'message': 'Video detection service failed. Please try again.'}, status=502)
 
                 _, out_buf = cv2.imencode('.jpg', annotated, [cv2.IMWRITE_JPEG_QUALITY, 80])
                 annotated_frames.append('data:image/jpeg;base64,' + base64.b64encode(out_buf).decode('utf-8'))
@@ -742,6 +770,8 @@ def upload_video(request):
             cap.release()
             cap = None
 
+            if not annotated_frames:
+                return JsonResponse({'status': 'error', 'message': 'Video contains no readable frames.'}, status=400)
             video_data_url = None
             if annotated_frames:
                 try:
@@ -786,14 +816,14 @@ def upload_video(request):
 
         except Exception as e:
             logger.exception("Video processing error")
-            return JsonResponse({'status': 'error', 'message': str(e)})
+            return JsonResponse({'status': 'error', 'message': 'Video processing failed.'}, status=500)
         finally:
             if cap is not None:
                 cap.release()
             if tmp_path and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
-    return JsonResponse({'status': 'error', 'message': 'Invalid request'})
+    return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=400)
 
 
 @login_required
@@ -1267,59 +1297,24 @@ def filter_history(request):
     return JsonResponse(upload_data, safe=False)
 
 
-cap = None
-is_detecting = False
-
-
-def generate_frames():
-    """Continuously capture frames from the webcam and apply object detection if enabled."""
-    global cap, is_detecting
-    if cap is None:
-        cap = cv2.VideoCapture(0)
-
-    detect_objects_fn = None
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
-
-        if is_detecting:
-            if detect_objects_fn is None:
-                from .object import detect_objects as detect_objects_fn
-            frame, _ = detect_objects_fn(frame)
-
-        success, buffer = cv2.imencode('.jpg', frame)
-        if not success:
-            continue
-
-        frame_bytes = buffer.tobytes()
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-
-
+@login_required
 def video_feed(request):
-    """Streams video from webcam."""
-    return StreamingHttpResponse(generate_frames(), content_type="multipart/x-mixed-replace; boundary=frame")
+    return JsonResponse({'error': 'Use the webcam on the dashboard to access your browser camera.'}, status=410)
 
 
+@login_required
+@require_POST
 def start_detection(request):
-    """Starts object detection."""
-    global is_detecting
-    is_detecting = True
-    return JsonResponse({"message": "Detection started"})
+    return video_feed(request)
 
 
+@login_required
+@require_POST
 def stop_detection(request):
-    """Stops object detection but keeps webcam open."""
-    global is_detecting
-    is_detecting = False
-    return JsonResponse({"message": "Detection stopped"})
+    return video_feed(request)
 
 
+@login_required
+@require_POST
 def stop_webcam(request):
-    """Stops webcam completely."""
-    global cap
-    if cap and cap.isOpened():
-        cap.release()
-        cap = None
-    return JsonResponse({"message": "Webcam stopped"})
+    return video_feed(request)
